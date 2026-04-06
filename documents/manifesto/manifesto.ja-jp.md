@@ -49,7 +49,7 @@ _ & x → _
 `全てがリスト、全てが関数`
 
 `map`
-[* 2,] 1 2 3 4 = 2 4 6 8
+[* 2,] 1 2 3 4 = [2 4 6 8]
 
 `fold`
 [+] 1 2 3 4 = 10
@@ -93,8 +93,8 @@ function fibonacci(n) {
 **Sign:**
 ```sign
 fibonacci : n ?
-  n <= 1 : n
-  fibonacci [n - 1] + fibonacci [n - 2]
+	n <= 1 : n
+	fibonacci [n - 1] + fibonacci [n - 2]
 ```
 
 ---
