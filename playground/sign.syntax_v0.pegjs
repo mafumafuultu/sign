@@ -8,6 +8,9 @@
   };
 }}
 
+
+Start = Program
+
 //空白必須
 __ = " "+
 
@@ -19,8 +22,6 @@ SOL = &{ location().start.column === 1; }
 
 //行末
 EOL = "\r\n" / "\r" / "\n"
-
-Start = Program
 
 Program = (Expression / Comment)
 
