@@ -29,7 +29,7 @@ Comment = SOL "`" [^\r\n]* EOL
 
 Expression
   = SOL Definition EOL
-  / SameDent Verification
+  / Verification
 
 Definition
   = Export            //エクスポート
@@ -285,15 +285,6 @@ Indent = tab:[\t]+ {
     return true; // マッチ成功
   }
   return false; // マッチ失敗（インデントされていない）
-}
-
-SameDent = tab:[\t]* {
-const currentIndentLength = global.context.indentStack.length > 0 
-    ? global.context.indentStack[global.context.indentStack.length - 1] 
-    : 0;
-
-  // 読み込んだタブの数が現在のインデントと「完全に一致」するかチェック
-  return tab.length === currentIndentLength;
 }
 
 Dedent = &{
