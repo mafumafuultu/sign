@@ -103,7 +103,6 @@ Defaultive
   = "[" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "]"
   / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
   / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
-  / EOL Indent Indent (identifier _ ":" _ Verification EOL)+ Dedent Dedent
 
 Match_Case = Calculate ":" Verification
 
