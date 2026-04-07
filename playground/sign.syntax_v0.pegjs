@@ -23,12 +23,12 @@ SOL = &{ location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = (Expression / Comment)
+Program = (Expression+ / Comment)
 
-Comment = SOL "`" [^\r\n]* EOL
+Comment = (SOL "`" [^\r\n]* EOL)*
 
 Expression
-  = SOL Definition EOL
+  = (SOL Definition EOL)+
   / Verification
 
 Definition
@@ -47,6 +47,7 @@ Verification
   / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
+  / EOL
 
 Export = ("###" / "##" / "#")? Define
 
@@ -124,7 +125,7 @@ DirectProduct
   / Sequence
   / Continuous
 
-DirectSum = Calculate (__ Continuous)*
+DirectSum = Calculate (__ (Continuous / Sequence / Calculate))*
 
 Compose
   = (Closure / function) (__ (Closure / function))*
