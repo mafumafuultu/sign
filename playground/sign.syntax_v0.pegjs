@@ -23,13 +23,14 @@ SOL = &{ location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = (Expression+ / Comment)
+Program = (Expression / Comment)
 
 Comment = (SOL "`" [^\r\n]* EOL)*
 
 Expression
   = (SOL Definition EOL)+
-  / Verification
+  / (Verification EOL)+
+  / ""
 
 Definition
   = Export            //エクスポート
@@ -47,7 +48,7 @@ Verification
   / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
-  / EOL
+  / EOL?
 
 Export = ("###" / "##" / "#")? Define
 
