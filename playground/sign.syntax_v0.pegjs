@@ -273,7 +273,7 @@ infix
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-Indent = tab:[\t]+ {
+Indent = tab:[\t]+ &{
 // 現在のインデントレベル（スタックのトップ）を取得
   const currentIndentLength = global.context.indentStack.length > 0 
     ? global.context.indentStack[global.context.indentStack.length - 1] 
