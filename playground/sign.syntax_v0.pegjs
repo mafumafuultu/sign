@@ -114,8 +114,8 @@ PointFree
 DirectMap
   =  prefix "_" ","
   / "_" postfix ","
-  / number infix ","
-  / infix number ","
+  / (number / address / register) infix ","
+  / infix (number / address / register) ","
 
 DirectFold = infix
 
@@ -213,11 +213,11 @@ Atom
   / address
   / register
   / unicode
-  / identifier
   / function
   / dictionary
   / list
   / stringType
+  / identifier
 
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
