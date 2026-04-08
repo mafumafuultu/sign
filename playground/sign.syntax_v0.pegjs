@@ -1,12 +1,12 @@
-{{
-  global.typeTable = {
+{
+  let typeTable = {
   };
 
-  global.context = {
+  let context = {
     indentStack : [],
     indent : ""
   };
-}}
+}
 
 
 Start = Program
@@ -232,7 +232,7 @@ charactor = "\\" [\s\S]
 
 // 2. 浮動小数点
 // （整数部 . 小数部）
-number = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
+number = "-"? int_part:[0-9]+ "."? frac_part:[0-9]*
 
 // 3. アドレス型 ("0x" Hex*)
 // ※ AArch64のメモリオペランド等に直接写像される
@@ -279,14 +279,14 @@ infix
 
 Indent = tab:[\t]+ &{
 // 現在のインデントレベル（スタックのトップ）を取得
-  const currentIndentLength = global.context.indentStack.length > 0 
-    ? global.context.indentStack[global.context.indentStack.length - 1] 
+  const currentIndentLength = context.indentStack.length > 0 
+    ? context.indentStack[context.indentStack.length - 1] 
     : 0;
   
   // 読み込んだタブの数が現在のインデントより深いかチェック
   if (tab.length > currentIndentLength) {
-    global.context.indentStack.push(tab.length);
-    global.context.indent = tab.join("");
+    context.indentStack.push(tab.length);
+    context.indent = tab.join("");
     return true; // マッチ成功
   }
   return false; // マッチ失敗（インデントされていない）
@@ -300,12 +300,12 @@ Dedent = &{
   // 現在のスタックトップよりもタブが少なければ pop しつつマッチ成功とする、という形にします。
   
   // とりあえず pop するだけのプレースホルダー
-  if (global.context.indentStack.length > 0) {
-     global.context.indentStack.pop();
-     const newLen = global.context.indentStack.length > 0 
-        ? global.context.indentStack[global.context.indentStack.length - 1] 
+  if (context.indentStack.length > 0) {
+     context.indentStack.pop();
+     const newLen = context.indentStack.length > 0 
+        ? context.indentStack[context.indentStack.length - 1] 
         : 0;
-     global.context.indent = "\t".repeat(newLen);
+     context.indent = "\t".repeat(newLen);
      return true;
   }
   return false;
