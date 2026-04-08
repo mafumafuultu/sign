@@ -28,9 +28,8 @@ Program = (Expression / Comment)
 Comment = (SOL "`" [^\r\n]* EOL)*
 
 Expression
-  = (SOL Definition EOL)+
-  / (Verification EOL)+
-  / EOL
+  = SOL Definition EOL* (SOL Definition EOL*)*
+  / Verification (EOL+ Verification)*
   / ""
 
 Definition
@@ -128,8 +127,8 @@ DirectFold = _ infix _
 DirectProduct
   = DirectSum (_ "," _ DirectProduct)?
   / Compose
-  / Sequence
   / Continuous
+  / Sequence
 
 DirectSum = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
 
@@ -191,15 +190,15 @@ StringTypeExpand
   = stringType "~"
   / string "~"
 
-Address
-  = address
-  / "$"? Get
-
 Get
   = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
   / list ( _ "'" _ (number / identifier / Sequence))
   / (identifier / string / StringTypeExpand) __ "@" __ Get
-  / Input
+  / Address
+
+Address
+  = address
+  / "$"? Input
 
 Input = "@"? Compute
 
@@ -231,6 +230,7 @@ Atom
   / list
   / stringType
   / identifier
+  / unit
 
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
@@ -285,6 +285,8 @@ infix
   / "<=" / "==" / ">=" / "!="
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
+
+unit = "_"
 
 Indent = tab:[\t]+ &{
 // 現在のインデントレベル（スタックのトップ）を取得
