@@ -4,9 +4,12 @@
 
   global.context = {
     indentStack : [],
-    indent = ""
+    indent : ""
   };
 }}
+
+
+Start = Program
 
 //空白必須
 __ = " "+
@@ -22,11 +25,12 @@ EOL = "\r\n" / "\r" / "\n"
 
 Program = (Expression / Comment)
 
-Comment = SOL "`" [^\r\n]* EOL
+Comment = (SOL "`" [^\r\n]* EOL)*
 
 Expression
-  = SOL Definition EOL
-  / SameDent Verification
+  = (SOL Definition EOL)+
+  / (Verification EOL)+
+  / ""
 
 Definition
   = Export            //エクスポート
@@ -44,13 +48,13 @@ Verification
   / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
+  / EOL?
 
 Export = ("###" / "##" / "#")? Define
 
 Define
   = name:identifier _ ":" _ (
-    Expand
-    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+      (PointFree / Lambda)  { typeTable[name] = "function"; }
     / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
     / string { typeTable[name] = "string"; }
@@ -76,15 +80,14 @@ Construct
 
 Dictionary
   = name:identifier _ ":" _ (
-    Expand
-    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+      (PointFree / Lambda)  { typeTable[name] = "function"; }
+    / EOL Expand EOL dict:Dictionary { typeTable[name] = {...dict}; }
     / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
     / string { typeTable[name] = "string"; }
     / Verification
     / Atom
   )
-
 
 Closure
   = "[" (Lambda / PointFree) "]"
@@ -93,7 +96,7 @@ Closure
 
 Lambda
   = Arguments _ "?" _ (Output / Lambda)
-  / Arguments _ "?" "\n" Indent ((Match_Case / Output) EOL)* Dedent
+  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)* Dedent
 
 Arguments = Continuous / Defaultive
 
@@ -101,9 +104,8 @@ Defaultive
   = "[" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "]"
   / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
   / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
-  / EOL Indent Indent (identifier _ ":" _ Verification EOL)+ Dedent Dedent
 
-Match_Case = Compare ":" Verification
+Match_Case = Calculate ":" Verification
 
 PointFree
   = DirectMap
@@ -112,8 +114,8 @@ PointFree
 DirectMap
   =  prefix "_" ","
   / "_" postfix ","
-  / number infix ","
-  / infix number ","
+  / (number / address / register) infix ","
+  / infix (number / address / register) ","
 
 DirectFold = infix
 
@@ -123,16 +125,23 @@ DirectProduct
   / Sequence
   / Continuous
 
-DirectSum = Calculate (__ Continuous)*
+DirectSum = Calculate (__ (Continuous / Sequence / Calculate))*
 
 Compose
   = (Closure / function) (__ (Closure / function))*
   / Sequence
 
 Sequence //無限リストも表現可能
-  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
+  = "[" SequenceInner "]"
+  / "{" SequenceInner "}"
+  / "(" SequenceInner ")"
+
+SequenceInner
+  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
   / (number / Arithmetic) __ "~" __ (number / Arithmetic)
-  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) __ "~"
+  / "~" __ (number / Arithmetic)
 
 Continuous = "~"? Calculate (__ "~"? Calculate)*
 
@@ -148,17 +157,21 @@ Arithmetic = Additive
 
 Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
 Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
-Expornential = Factorial (_ "^" _ Factorial)*
+
+Expornential
+  = Factorial (_ "^" _ Expornential)*
+  / Factorial
+
 Factorial = Absolute "!"?
 
 Absolute
-  = "|" (Additive / ArithmeticBlock) "|"
-  / ArithmeticBlock
+  = "|" (Additive / CalculateBlock) "|"
+  / CalculateBlock
 
-ArithmeticBlock
-  = "[" Arithmetic "]"
-  / "{" Arithmetic "}"
-  / "(" Arithmetic ")"
+CalculateBlock
+  = "[" Calculate "]"
+  / "{" Calculate "}"
+  / "(" Calculate ")"
   / number
   / identifier
   / Expand
@@ -175,7 +188,7 @@ Address
 
 Get
   = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
-  / list ( _ "'" _ (number / identifier))
+  / list ( _ "'" _ (number / identifier / Sequence))
   / (identifier / string / StringTypeExpand) __ "@" __ Get
   / Input
 
@@ -204,11 +217,11 @@ Atom
   / address
   / register
   / unicode
-  / identifier
   / function
   / dictionary
   / list
   / stringType
+  / identifier
 
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
@@ -229,7 +242,7 @@ address = "0x" Hex+
 // ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
 register 
   = "0r" Hex+
-  / "0b" ["0" / "1"]+
+  / "0b" ("0" / "1")+
 
 // 5. UniCode型 ("0u" Hex*)
 unicode = "0u" Hex+
@@ -241,10 +254,10 @@ function
   = name:identifier &{ typeTable[name] === "function"; }
 
 dictionary
-  = name:identifier &{ typeTable[name].constructor === Object; }
+  = name:identifier &{ typeTable[name] && typeTable[name].constructor === Object; }
 
 list
-  = name:identifier &{ !!typeTable[name].constructor === Array; }
+  = name:identifier &{ Array.isArray(typeTable[name]); }
 
 stringType
   = name:identifier &{ typeTable[name] === "string"; }
@@ -264,10 +277,7 @@ infix
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-Indent = tab:[\t]+ {
-}
-
-SameDent = tab:[\t]* {
+Indent = tab:[\t]+ &{
 }
 
 Dedent = &{
