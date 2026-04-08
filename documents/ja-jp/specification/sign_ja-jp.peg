@@ -23,13 +23,13 @@ SOL = &{ return location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = (Expression / Comment)
-
-Comment = (SOL "`" [^\r\n]* EOL)*
+Program = Expression
 
 Expression
-  = SOL Definition EOL* (SOL Definition EOL*)*
-  / Verification (EOL+ Verification)*
+  = SOL Definition (EOL+ (SOL Definition EOL+)* / (EOL+ Verification)*)
+  / Verification ((EOL+ Verification)* / (EOL+ (SOL Definition EOL+))*)
+  / Comment
+  / EOL*
   / ""
 
 Definition
@@ -48,16 +48,17 @@ Verification
   / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
-  / EOL?
+
+Comment = (SOL "`" [^\r\n]* EOL)*
 
 Export = ("###" / "##" / "#")? Define
 
 Define
   = name:identifier _ ":" _ (
-     EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
-    / (PointFree / Lambda)  { typeTable[name] = "function"; }
+      string { typeTable[name] = "string"; }
+    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
-    / string { typeTable[name] = "string"; }
+    / (PointFree / Lambda)  { typeTable[name] = "function"; }
     / Verification
     / Atom
     / Define
@@ -80,11 +81,11 @@ Construct
 
 Dictionary
   = name:identifier _ ":" _ (
-      (PointFree / Lambda)  { typeTable[name] = "function"; }
-    / EOL Expand EOL dict:Dictionary { typeTable[name] = {...dict}; }
+     string { typeTable[name] = "string"; }
+    / EOL Expand EOL { typeTable[name] = {...dict}; }
     / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
-    / string { typeTable[name] = "string"; }
+    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
     / Verification
     / Atom
   )
@@ -127,8 +128,8 @@ DirectFold = _ infix _
 DirectProduct
   = DirectSum (_ "," _ DirectProduct)
   / Compose
-  / Continuous
   / Sequence
+  / Continuous
 
 DirectSum = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
 
