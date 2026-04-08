@@ -55,8 +55,8 @@ Export = ("###" / "##" / "#")? Define
 
 Define
   = name:identifier _ ":" _ (
-      (PointFree / Lambda)  { typeTable[name] = "function"; }
-    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
+     EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
+    / (PointFree / Lambda)  { typeTable[name] = "function"; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
     / string { typeTable[name] = "string"; }
     / Verification
@@ -110,6 +110,7 @@ Match_Case = Calculate ":" Verification
 
 PointFree
   = DirectMap
+  / Normal
   / DirectFold
 
 DirectMap
@@ -117,6 +118,10 @@ DirectMap
   / "_" postfix ","
   / (number / address / register) _ infix ","
   / infix _ (number / address / register) ","
+
+Normal
+  = (number / address / register) _ infix
+  / infix _ (number / address / register)
 
 DirectFold = infix
 
@@ -126,7 +131,7 @@ DirectProduct
   / Sequence
   / Continuous
 
-DirectSum = Calculate (__ (Continuous / Sequence / Calculate))*
+DirectSum = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
 
 Compose
   = (Closure / function) (__ (Closure / function))*
@@ -176,12 +181,15 @@ CalculateBlock
   / number
   / identifier
   / Expand
+  / Get
 
 Expand
   = (identifier / dictionary / list / string) "~"
   / StringTypeExpand
 
-StringTypeExpand = stringType "~"
+StringTypeExpand
+  = stringType "~"
+  / string "~"
 
 Address
   = address
