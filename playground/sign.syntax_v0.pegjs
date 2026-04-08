@@ -23,13 +23,12 @@ SOL = &{ return location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = Expression
+Program = Expression (EOL Expression)*
 
 Expression
-  = SOL Definition (EOL+ (SOL Definition EOL+)* / (EOL+ Verification)*)
-  / Verification ((EOL+ Verification)* / (EOL+ (SOL Definition EOL+))*)
-  / Comment
-  / EOL*
+  = Comment
+  / SOL Definition
+  / Verification EOL
   / ""
 
 Definition
@@ -48,8 +47,9 @@ Verification
   / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
+  / EOL*
 
-Comment = (SOL "`" [^\r\n]* EOL)*
+Comment = (SOL "`" [^\r\n]* EOL)
 
 Export = ("###" / "##" / "#")? Define
 
@@ -165,7 +165,7 @@ Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
 Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
 
 Expornential
-  = Factorial (_ "^" _ Expornential)*
+  = Factorial _ "^" _ Expornential*
   / Factorial
 
 Factorial = Absolute "!"?
