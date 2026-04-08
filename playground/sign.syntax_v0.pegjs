@@ -18,7 +18,7 @@ __ = sp:" "+ { return }
 _ = " "* { return }
 
 //行頭
-SOL = &{ location().start.column === 1; }
+SOL = &{ return location().start.column === 1; }
 
 //行末
 EOL = "\r\n" / "\r" / "\n"
@@ -123,7 +123,7 @@ Normal
   = (number / address / register) _ infix
   / infix _ (number / address / register)
 
-DirectFold = infix
+DirectFold = _ infix _
 
 DirectProduct
   = DirectSum (_ "," _ DirectProduct)?
@@ -235,41 +235,41 @@ Atom
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
 
-string = "`" [^`\r\n]* "`"
+string = $("`" [^`\r\n]* "`")
 
-charactor = "\\" [\s\S]
+charactor = $("\\" [\s\S])
 
 // 2. 浮動小数点
 // （整数部 . 小数部）
-number = "-"? int_part:[0-9]+ "."? frac_part:[0-9]*
+number = $("-"? int_part:[0-9]+ "."? frac_part:[0-9]*)
 
 // 3. アドレス型 ("0x" Hex*)
 // ※ AArch64のメモリオペランド等に直接写像される
-address = "0x" Hex+
+address = $("0x" Hex+)
 
 // 4. レジスタ即値型 ("0r" Hex*)
 // ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
 register 
-  = "0r" Hex+
-  / "0b" ("0" / "1")+
+  = $("0r" Hex+)
+  / $("0b" ("0" / "1")+)
 
 // 5. UniCode型 ("0u" Hex*)
-unicode = "0u" Hex+
+unicode = $("0u" Hex+)
 
 // 6. 識別子（変数名など）
-identifier = [a-zA-Z_][a-zA-Z0-9_]*
+identifier = $([a-zA-Z_][a-zA-Z0-9_]*)
 
 function
-  = name:identifier &{ typeTable[name] === "function"; }
+  = name:identifier &{ return typeTable[name] === "function"; }
 
 dictionary
-  = name:identifier &{ typeTable[name] && typeTable[name].constructor === Object; }
+  = name:identifier &{ return typeTable[name] && typeTable[name].constructor === Object; }
 
 list
-  = name:identifier &{ Array.isArray(typeTable[name]); }
+  = name:identifier &{ return Array.isArray(typeTable[name]); }
 
 stringType
-  = name:identifier &{ typeTable[name] === "string"; }
+  = name:identifier &{ return typeTable[name] === "string"; }
 
 Hex = [0-9a-fA-F]
 
