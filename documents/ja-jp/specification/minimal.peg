@@ -1,8 +1,5 @@
 Start = Expression
 
-_ = [ ]*
-__ = [ ]+
-
 Expression = Define
 
 Define
@@ -27,7 +24,7 @@ And = Not (_ "&" _ Not)*
 
 Not = "!"? Equal*
 
-Equal = Value (_ "=" _ Value)*
+Equal = Value (_ "=" _ Value)?
 
 Value   = name / string / charactor
 
@@ -36,3 +33,6 @@ name    = $([a-zA-Z_] [0-9a-zA-Z_]*)
 string  = $("`" [^`\r\n]* "`")
 
 charactor = $("\\" [\s\S])
+
+_ = [ ]*
+__ = [ ]+
