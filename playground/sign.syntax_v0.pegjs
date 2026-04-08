@@ -54,8 +54,7 @@ Export = ("###" / "##" / "#")? Define
 
 Define
   = name:identifier _ ":" _ (
-    Expand
-    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+      (PointFree / Lambda)  { typeTable[name] = "function"; }
     / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
     / string { typeTable[name] = "string"; }
@@ -81,8 +80,8 @@ Construct
 
 Dictionary
   = name:identifier _ ":" _ (
-    Expand
-    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+      (PointFree / Lambda)  { typeTable[name] = "function"; }
+    / EOL Expand EOL dict:Dictionary { typeTable[name] = {...dict}; }
     / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
     / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
     / string { typeTable[name] = "string"; }
