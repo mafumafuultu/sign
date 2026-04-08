@@ -157,7 +157,11 @@ Arithmetic = Additive
 
 Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
 Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
-Expornential = Factorial (_ "^" _ Factorial)*
+
+Expornential
+  = Factorial (_ "^" _ Expornential)*
+  / Factorial
+
 Factorial = Absolute "!"?
 
 Absolute
