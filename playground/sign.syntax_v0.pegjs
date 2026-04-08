@@ -12,10 +12,10 @@
 Start = Program
 
 //空白必須
-__ = " "+
+__ = sp:" "+ { return }
 
 //空白可
-_ = " "*
+_ = " "* { return }
 
 //行頭
 SOL = &{ location().start.column === 1; }
@@ -30,6 +30,7 @@ Comment = (SOL "`" [^\r\n]* EOL)*
 Expression
   = (SOL Definition EOL)+
   / (Verification EOL)+
+  / EOL
   / ""
 
 Definition
@@ -114,8 +115,8 @@ PointFree
 DirectMap
   =  prefix "_" ","
   / "_" postfix ","
-  / (number / address / register) infix ","
-  / infix (number / address / register) ","
+  / (number / address / register) _ infix ","
+  / infix _ (number / address / register) ","
 
 DirectFold = infix
 
