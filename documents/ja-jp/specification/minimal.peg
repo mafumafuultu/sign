@@ -4,6 +4,10 @@ Expression = Define
 
 Define
   = name _ ":" _ Define
+  / Output
+
+Output
+  = (name / address) "#" Output
   / Apply
 
 Apply = (Lambda / name) (__ Product)+
@@ -22,17 +26,19 @@ Or = And (__ "|" __ And)*
 
 And = Not (_ "&" _ Not)*
 
-Not = "!"? Equal*
+Prefixies = ("@" / "$" / "!")? Equal*
 
 Equal = Value (_ "=" _ Value)?
 
-Value   = name / string / charactor
+Value   = name / string / charactor / address
 
 name    = $([a-zA-Z_] [0-9a-zA-Z_]*)
 
 string  = $("`" [^`\r\n]* "`")
 
 charactor = $("\\" [\s\S])
+
+address = $("0x" [0-9a-fA-F]+)
 
 _ = [ ]*
 __ = [ ]+
