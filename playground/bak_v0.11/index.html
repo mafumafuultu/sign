@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+	<meta charset="UTF-8">
+	<title>Sign WASM Playground</title>
+	<script src="https://unpkg.com/wabt@1.0.32/index.js"></script>
+	<style>
+		body {
+			font-family: monospace;
+			display: flex;
+			flex-direction: column;
+			background: #fafafa;
+			height: 100vh;
+			margin: 0;
+			color: #333;
+			overflow: hidden;
+		}
+
+		/* --- ナビゲーションバー --- */
+		.navbar {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			background: #2d2d2d;
+			color: #fff;
+			padding: 10px 20px;
+			box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+			z-index: 10;
+		}
+
+		.nav-left,
+		.nav-right {
+			display: flex;
+			align-items: center;
+			gap: 15px;
+		}
+
+		.hamburger {
+			font-size: 18px;
+			cursor: pointer;
+			user-select: none;
+			width: 32px;
+			height: 32px;
+			display: inline-flex;
+			justify-content: center;
+			align-items: center;
+			border-radius: 4px;
+			transition: transform 0.2s, background 0.2s, color 0.2s;
+			color: #ddd;
+		}
+
+		.hamburger.closed {
+			transform: rotate(-90deg);
+		}
+
+		.hamburger:hover {
+			background: #444;
+			color: #fff;
+		}
+
+		.navbar h1 {
+			margin: 0;
+			font-size: 18px;
+			letter-spacing: 1px;
+		}
+
+		.nav-link {
+			color: #61afef;
+			text-decoration: none;
+			font-size: 14px;
+			font-weight: bold;
+		}
+
+		.nav-link:hover {
+			text-decoration: underline;
+		}
+
+		/* --- 各種ボタン --- */
+		.lang-btn {
+			background: transparent;
+			color: #ddd;
+			border: 1px solid #666;
+			padding: 6px 12px;
+			font-size: 13px;
+			font-family: inherit;
+			cursor: pointer;
+			border-radius: 4px;
+			transition: all 0.2s;
+		}
+
+		.lang-btn:hover {
+			background: #444;
+			color: #fff;
+		}
+
+		.run-btn {
+			background: #007acc;
+			color: white;
+			border: none;
+			padding: 8px 20px;
+			font-size: 14px;
+			font-weight: bold;
+			cursor: pointer;
+			border-radius: 4px;
+			transition: background 0.2s;
+		}
+
+		.run-btn:hover {
+			background: #005999;
+		}
+
+		select {
+			padding: 6px;
+			font-size: 14px;
+			font-family: monospace;
+			border-radius: 4px;
+			border: 1px solid #ccc;
+			max-width: 250px;
+		}
+
+		/* --- メインレイアウト --- */
+		.main-layout {
+			display: flex;
+			flex-grow: 1;
+			min-height: 0;
+		}
+
+		/* --- サイドバー (リファレンスUI) --- */
+		.sidebar {
+			display: flex;
+			width: 580px;
+			/* デフォルト幅 */
+			background: #fff;
+			flex-shrink: 0;
+			/* CSSの使いにくいresizeは廃止し、JS制御に変更 */
+		}
+
+		.sidebar.hidden {
+			display: none !important;
+		}
+
+		.sidebar-menu {
+			width: 180px;
+			background: #f4f4f4;
+			border-right: 1px solid #ddd;
+			display: flex;
+			flex-direction: column;
+			overflow-y: auto;
+			flex-shrink: 0;
+		}
+
+		.menu-item {
+			padding: 12px 10px;
+			font-size: 13px;
+			cursor: pointer;
+			border-bottom: 1px solid #eee;
+			color: #555;
+			font-weight: bold;
+			border-left: 4px solid transparent;
+			box-sizing: border-box;
+			white-space: nowrap;
+			overflow: hidden;
+		}
+
+		.menu-item:hover {
+			background: #eaeaea;
+		}
+
+		.menu-item.active {
+			background: #fff;
+			color: #007acc;
+			border-left-color: #007acc;
+		}
+
+		.sidebar-content {
+			flex-grow: 1;
+			padding: 20px;
+			overflow-y: auto;
+			overflow-x: hidden;
+			font-size: 14px;
+			line-height: 1.5;
+			color: #444;
+			min-width: 200px;
+		}
+
+		.sidebar-content h2 {
+			margin-top: 0;
+			margin-bottom: 15px;
+			color: #333;
+			border-bottom: 2px solid #eaeaea;
+			padding-bottom: 10px;
+			font-size: 18px;
+		}
+
+		.sidebar-content h4 {
+			margin: 0 0 8px 0;
+			color: #007acc;
+			border-bottom: 1px solid #eee;
+			padding-bottom: 4px;
+		}
+
+		.sidebar-content ul {
+			margin: 5px 0 20px 0;
+			padding-left: 20px;
+		}
+
+		.sidebar-content li {
+			margin-bottom: 6px;
+		}
+
+		.sidebar-content p {
+			margin: 5px 0 15px 0;
+		}
+
+		code {
+			background: #f0f0f0;
+			padding: 2px 5px;
+			border-radius: 3px;
+			color: #d14;
+			font-weight: bold;
+			font-family: monospace;
+		}
+
+		/* チートシート用テーブル */
+		.cheat-sheet {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 12px;
+			margin-bottom: 20px;
+		}
+
+		.cheat-sheet th,
+		.cheat-sheet td {
+			border: 1px solid #ddd;
+			padding: 6px;
+			text-align: left;
+		}
+
+		.cheat-sheet th {
+			background: #f8f8f8;
+			color: #333;
+		}
+
+		.cheat-sheet code {
+			background: transparent;
+			padding: 0;
+			color: #c7254e;
+		}
+
+		/* ★リサイザー (ドラッグ用ハンドル) */
+		.resizer {
+			width: 5px;
+			background: #ddd;
+			cursor: col-resize;
+			/* 左右矢印カーソル */
+			flex-shrink: 0;
+			transition: background 0.2s;
+			z-index: 5;
+		}
+
+		.resizer:hover,
+		.resizer.dragging {
+			background: #007acc;
+			/* ホバー・ドラッグ時に色を変える */
+		}
+
+		.resizer.hidden {
+			display: none !important;
+		}
+
+		/* --- ワークスペース --- */
+		.workspace {
+			display: flex;
+			flex-direction: column;
+			gap: 15px;
+			padding: 20px;
+			flex-grow: 1;
+			min-width: 0;
+			background: #fafafa;
+		}
+
+		.input-panel {
+			display: flex;
+			flex-direction: column;
+			flex: 1;
+		}
+
+		.panel-header {
+			margin-bottom: 5px;
+			font-weight: bold;
+			font-size: 14px;
+			color: #555;
+		}
+
+		textarea {
+			font-family: monospace;
+			font-size: 14px;
+			padding: 10px;
+			border-radius: 5px;
+			border: 1px solid #ccc;
+			resize: none;
+		}
+
+		.input-area {
+			flex-grow: 1;
+			background: #fff;
+			box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+		}
+
+		.panels {
+			display: flex;
+			gap: 15px;
+			flex: 1;
+		}
+
+		.panel {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+		}
+
+		.output-area {
+			background: #1e1e1e;
+			color: #d4d4d4;
+			flex-grow: 1;
+			white-space: pre;
+			overflow-wrap: normal;
+			overflow-x: auto;
+			padding: 10px;
+		}
+	</style>
+</head>
+
+<body>
+
+	<div class="navbar">
+		<div class="nav-left">
+			<div id="hamburgerBtn" class="hamburger closed" title="Toggle Reference">▼</div>
+			<h1 id="titleText">Sign Playground</h1>
+			<a href="https://github.com/johnny-shaman/Sign/tree/main/documents" target="_blank" class="nav-link"
+				id="githubLink">GitHub Docs ↗</a>
+		</div>
+		<div class="nav-right">
+			<button id="langBtn" class="lang-btn">English</button>
+			<select id="sampleSelect"></select>
+			<button id="runBtn" class="run-btn">▶ Compile & Run WASM</button>
+		</div>
+	</div>
+
+	<div class="main-layout">
+		<div class="sidebar hidden" id="sidebar">
+			<div class="sidebar-menu" id="refMenu"></div>
+			<div class="sidebar-content" id="refContent"></div>
+		</div>
+
+		<div class="resizer hidden" id="resizer"></div>
+
+		<div class="workspace">
+			<div class="input-panel">
+				<label class="panel-header" id="codeLabel">Sign Code:</label>
+				<textarea id="codeInput" class="input-area" spellcheck="false"></textarea>
+			</div>
+
+			<div class="panels">
+				<div class="panel">
+					<div class="panel-header" id="watLabel">Generated WAT</div>
+					<textarea id="watOutput" class="output-area" readonly></textarea>
+				</div>
+				<div class="panel">
+					<div class="panel-header" id="outputLabel">Execution Result</div>
+					<textarea id="consoleOutput" class="output-area" readonly></textarea>
+				</div>
+			</div>
+			<div id="footerNote" style="font-size: 12px; color: #888; text-align: right;"></div>
+		</div>
+	</div>
+
+	<script type="module">
+		import { parseSign } from './parser_browser.js';
+		import { compileToWat } from './compiler_wat.js';
+		import { uiText, samples, referenceData } from './demo_data.js';
+
+		// --- 状態管理 ---
+		let currentLang = 'ja';
+		let activeTabId = referenceData['ja'][0].id; // ← 配列の一番目のIDを自動取得
+
+		// DOM要素の取得
+		const titleText = document.getElementById('titleText');
+		const hamburgerBtn = document.getElementById('hamburgerBtn');
+		const githubLink = document.getElementById('githubLink');
+		const langBtn = document.getElementById('langBtn');
+		const sampleSelect = document.getElementById('sampleSelect');
+		const runBtn = document.getElementById('runBtn');
+		const codeLabel = document.getElementById('codeLabel');
+		const watLabel = document.getElementById('watLabel');
+		const outputLabel = document.getElementById('outputLabel');
+		const footerNote = document.getElementById('footerNote');
+		const refMenu = document.getElementById('refMenu');
+		const refContent = document.getElementById('refContent');
+		const codeInput = document.getElementById('codeInput');
+
+		const sidebar = document.getElementById('sidebar');
+		const resizer = document.getElementById('resizer');
+
+		// --- ★ドラッグによるリサイズ処理 ---
+		let isResizing = false;
+
+		resizer.addEventListener('mousedown', (e) => {
+			isResizing = true;
+			resizer.classList.add('dragging');
+			// ドラッグ中にテキストが選択されるのを防ぐ
+			document.body.style.userSelect = 'none';
+			document.body.style.cursor = 'col-resize';
+		});
+
+		document.addEventListener('mousemove', (e) => {
+			if (!isResizing) return;
+			// 最小幅350px、最大幅は画面幅の80%に制限
+			let newWidth = e.clientX;
+			if (newWidth < 350) newWidth = 350;
+			if (newWidth > window.innerWidth * 0.8) newWidth = window.innerWidth * 0.8;
+
+			sidebar.style.width = newWidth + 'px';
+		});
+
+		document.addEventListener('mouseup', () => {
+			if (isResizing) {
+				isResizing = false;
+				resizer.classList.remove('dragging');
+				document.body.style.userSelect = '';
+				document.body.style.cursor = '';
+			}
+		});
+
+		// --- サイドバー開閉処理 ---
+		hamburgerBtn.addEventListener('click', () => {
+			sidebar.classList.toggle('hidden');
+			resizer.classList.toggle('hidden'); // リサイザー自体も一緒に消す
+			hamburgerBtn.classList.toggle('closed');
+		});
+
+		// --- UI描画ロジック ---
+		function renderUI() {
+			const txt = uiText[currentLang];
+
+			titleText.textContent = txt.title;
+			hamburgerBtn.title = txt.toggleRef;
+			githubLink.textContent = txt.github;
+			runBtn.textContent = txt.runBtn;
+			codeLabel.textContent = txt.codeLabel;
+			watLabel.textContent = txt.watLabel;
+			outputLabel.textContent = txt.outputLabel;
+			footerNote.textContent = txt.footerNote;
+			langBtn.textContent = currentLang === 'ja' ? 'English' : '日本語';
+
+			const prevSample = sampleSelect.value;
+			sampleSelect.innerHTML = `<option value="">${txt.sampleDefault}</option>`;
+			for (const [key, data] of Object.entries(samples)) {
+				const option = document.createElement('option');
+				option.value = key;
+				option.textContent = data.name[currentLang];
+				sampleSelect.appendChild(option);
+			}
+			sampleSelect.value = prevSample;
+
+			if (prevSample && samples[prevSample]) {
+				const otherLang = currentLang === 'ja' ? 'en' : 'ja';
+				if (codeInput.value === samples[prevSample].code[otherLang]) {
+					codeInput.value = samples[prevSample].code[currentLang];
+				}
+			}
+
+			refMenu.innerHTML = '';
+			referenceData[currentLang].forEach((data) => {
+				const item = document.createElement('div');
+				item.className = 'menu-item';
+				if (data.id === activeTabId) item.classList.add('active');
+				item.textContent = data.menuLabel;
+
+				item.addEventListener('click', () => {
+					activeTabId = data.id;
+					renderUI();
+				});
+
+				refMenu.appendChild(item);
+			});
+
+			const activeData = referenceData[currentLang].find(d => d.id === activeTabId) || referenceData[currentLang][0];
+			refContent.innerHTML = `<h2>${activeData.title}</h2>${activeData.content}`;
+		}
+
+		renderUI();
+
+		langBtn.addEventListener('click', () => {
+			currentLang = currentLang === 'ja' ? 'en' : 'ja';
+			renderUI();
+		});
+
+		sampleSelect.addEventListener('change', (e) => {
+			const val = e.target.value;
+			if (samples[val]) codeInput.value = samples[val].code[currentLang];
+		});
+
+		codeInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Tab') {
+				e.preventDefault();
+				const start = codeInput.selectionStart, end = codeInput.selectionEnd;
+				codeInput.value = codeInput.value.substring(0, start) + "\t" + codeInput.value.substring(end);
+				codeInput.selectionStart = codeInput.selectionEnd = start + 1;
+			}
+		});
+
+		// --- WASM 実行処理 ---
+		runBtn.addEventListener('click', async () => {
+			const code = codeInput.value;
+			const outputEl = document.getElementById('consoleOutput');
+			outputEl.value = 'Compiling...';
+
+			try {
+				const ast = parseSign(code);
+				console.log("★ AST:", JSON.stringify(ast, null, 2));
+
+				const watCode = compileToWat(ast);
+				document.getElementById('watOutput').value = watCode;
+
+				const wabt = await WabtModule();
+				const module = wabt.parseWat('test.wat', watCode);
+				module.resolveNames();
+				module.validate();
+				const { buffer } = module.toBinary({ log: true });
+
+				let wasmInstance;
+				let wasmMemory;
+
+				const importObject = {
+					env: {
+						math_pow: Math.pow,
+						str_to_num: (ptrF64) => {
+							if (!wasmMemory) return Number.NaN;
+							const buf = new ArrayBuffer(8);
+							const view = new DataView(buf);
+							view.setFloat64(0, ptrF64, true);
+							const ptr = view.getUint32(0, true);
+							const memView = new DataView(wasmMemory.buffer);
+							const len = memView.getUint32(ptr, true);
+							const bytes = new Uint8Array(wasmMemory.buffer, ptr + 4, len);
+							const str = new TextDecoder('utf-8').decode(bytes);
+							const num = parseFloat(str);
+							return isNaN(num) ? 0.0 : num;
+						},
+						str_concat: (leftF64, rightF64) => {
+							if (!wasmMemory || !wasmInstance) return Number.NaN;
+							function getStr(valF64) {
+								const buf = new ArrayBuffer(8);
+								const view = new DataView(buf);
+								view.setFloat64(0, valF64, true);
+								const lower = view.getUint32(0, true);
+								const upper = view.getUint32(4, true);
+								const tag = upper & 0xFFFF0000;
+								if (tag === 0x7FFB0000) {
+									const memView = new DataView(wasmMemory.buffer);
+									const len = memView.getUint32(lower, true);
+									const bytes = new Uint8Array(wasmMemory.buffer, lower + 4, len);
+									return new TextDecoder('utf-8').decode(bytes);
+								} else if (tag === 0x7FFA0000) {
+									return String.fromCodePoint(lower);
+								} else {
+									return valF64.toString();
+								}
+							}
+							const strL = getStr(leftF64);
+							const strR = getStr(rightF64);
+							const newStr = strL + strR;
+							const encoder = new TextEncoder();
+							const newBytes = encoder.encode(newStr);
+							const newLen = newBytes.length;
+							const newPtr = wasmInstance.instance.exports.alloc(newLen + 4);
+							const newMemView = new DataView(wasmMemory.buffer);
+							newMemView.setUint32(newPtr, newLen, true);
+							const targetBytes = new Uint8Array(wasmMemory.buffer, newPtr + 4, newLen);
+							targetBytes.set(newBytes);
+							const buf = new ArrayBuffer(8);
+							const view = new DataView(buf);
+							view.setUint32(0, newPtr, true);
+							view.setUint32(4, 0x7FFB0000, true);
+							return view.getFloat64(0, true);
+						}
+					}
+				};
+
+				wasmInstance = await WebAssembly.instantiate(buffer, importObject);
+				wasmMemory = wasmInstance.instance.exports.memory;
+				const memView = new DataView(wasmMemory.buffer);
+
+				wasmInstance.instance.exports.main();
+
+				function formatSignResult(upper32, lower32) {
+					if (upper32 === 0x7FF80000 && lower32 === 0) return "Unit";
+					if (upper32 === 0x7FFB0000) {
+						const len = memView.getUint32(lower32, true);
+						const bytes = new Uint8Array(wasmMemory.buffer, lower32 + 4, len);
+						return "`" + new TextDecoder('utf-8').decode(bytes) + "`";
+					}
+					if (upper32 === 0x7FF90000) return `0x${lower32.toString(16).padStart(4, '0')}`;
+					if (upper32 === 0x7FFA0000) return `'${String.fromCodePoint(lower32)}'`;
+					if (upper32 > 0 && upper32 < 10000 && lower32 % 8 === 0) return `<Function: ${upper32}>`;
+
+					if (upper32 === 0x7FFC0000 || upper32 === 0x7FF40000) {
+						function traverseList(ptr) {
+							if (ptr === 0) return [];
+							const carLower = memView.getUint32(ptr, true);
+							const carUpper = memView.getUint32(ptr + 4, true);
+							const cdrLower = memView.getUint32(ptr + 8, true);
+							const cdrUpper = memView.getUint32(ptr + 12, true);
+							let res = [];
+							if (carUpper === 0x7FFC0000 || carUpper === 0x7FF40000) {
+								res.push(traverseList(carLower));
+							} else {
+								res.push(formatSignResult(carUpper, carLower));
+							}
+							if (cdrUpper === 0x7FFC0000 || cdrUpper === 0x7FF40000) {
+								res = res.concat(traverseList(cdrLower));
+							} else if (!(cdrUpper === 0x7FF80000 && cdrLower === 0)) {
+								res.push(formatSignResult(cdrUpper, cdrLower));
+							}
+							return res;
+						}
+						const array = traverseList(lower32);
+
+						function arrayToString(arr, indent = "") {
+							if (!Array.isArray(arr)) return arr;
+							if (arr.length === 0) return "[ ]";
+							const isDict = arr.every(item =>
+								Array.isArray(item) && item.length === 2 &&
+								typeof item[0] === 'string' && item[0].startsWith('`') && item[0].endsWith('`')
+							);
+							if (isDict) {
+								let lines = arr.map(item => {
+									let key = item[0].replace(/^`|`$/g, '');
+									let val = Array.isArray(item[1]) ? arrayToString(item[1], indent + "  ") : item[1];
+									return `${indent}  ${key} : ${val}`;
+								});
+								return "[\n" + lines.join("\n") + "\n" + indent + "]";
+							} else {
+								let elements = arr.map(v => Array.isArray(v) ? arrayToString(v, indent) : v);
+								return "[ " + elements.join(", ") + " ]";
+							}
+						}
+						return arrayToString(array);
+					}
+
+					const floatBuf = new ArrayBuffer(8);
+					const floatView = new DataView(floatBuf);
+					floatView.setUint32(0, lower32, true);
+					floatView.setUint32(4, upper32, true);
+					return floatView.getFloat64(0, true).toString();
+				}
+
+				const finalLower = memView.getUint32(0, true);
+				const finalUpper = memView.getUint32(4, true);
+
+				outputEl.value = formatSignResult(finalUpper, finalLower);
+
+			} catch (err) {
+				outputEl.value = `Error: ${err.message}`;
+				console.error(err);
+			}
+		});
+	</script>
+</body>
+
+</html>

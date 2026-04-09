@@ -1,0 +1,274 @@
+/*
+# Sign言語演算子記号表（優先順位順）
+
+## 基本原則
+- 前置演算子は、対象値の直前に配置しなければならない（対象値との間を空白で区切ってはならない）
+- 後置演算子は、対象値の直後に配置しなければならない（対象値との間を空白で区切ってはならない）
+- 中置演算子は、対象値の間に配置し、空白で区切らなければならない
+- 予約語なしで演算子のみで表現
+- 記号の自然な意味と操作的意味の一致
+- 優先順位の低い順（後から評価される順）から高い順に配列
+- 余積演算子は、単なる区切り文字として考えてもよく、全ての空白を余積演算子と見なせる
+- 空白を区切りとみなしても良い理由は、後段の処理で積演算子との優先順位を適宜決定可能であるため
+- 改行を演算子とみなす事もでき、その場合の機能は、行単位での評価としての意味をもつ
+- 改行の意味は、`|` か `,` か ` ` のいずれかに置き換え可能
+
+## 全演算子一覧表
+- 右単位元…右結合は位置表記内に※あり
+- 前置、または後置で優先順位を必ず重視しなくてはならないものは、優先順位表記内に※あり
+
+| 優先順位 | 記号 | 位置 | 機能 | 自然な意味 | 操作的意味論 |
+|---------|------|------|------|-----------|-------------|
+| 1 | `#` | 前置 | export | ハッシュタグ（公開・発見可能） | 名前をプロジェクト内部から発見可能にする |
+| 1 | `##` | 前置 | export | ハッシュタグ（公開・発見可能） | 名前を外部から発見可能にする（ARCに対応） |
+| 1 | `###` | 前置 | export | ハッシュタグ（公開・発見可能） | 名前を外部から発見可能にする （Pin領域でunloadしない前提）|
+| 2 | `:` | 中置※ | define | 即ち（同一視） | 左辺の名前(条件)を右辺の値に束縛 |
+| 3 | `#` | 中置 | output | ハッシュタグ（関連付け） | アドレスにデータを関連付ける |
+| 4 | ` ` | 中置 | apply | 余積（連接） | 関数適用 |
+| 5 | `?` | 中置※ | lambda | 問いかけ（どうするか？） | 関数定義 |
+| 6 | `,` | 中置※ | product | 積（構造的組み立て） | 右結合なリスト構築 |
+| 7 | ` ` | 中置 | compose | 余積（連接） | 左結合な関数合成 |
+| 8 | ` ` | 中置 | push | 余積（連接） | リストへ追加 |
+| 8 | ` ` | 中置 | concat | 余積（連接） | リスト結合 |
+| 8 | ` ` | 中置 | construct | 余積（連接） | 左結合なリスト構築 |
+| 9 | `~` | 中置 | range | around（範囲のその辺り） | 範囲リスト構築 |
+| 9 | `~+` | 中置 | range | around（範囲のその辺り） | 等差数列指定 |
+| 9 | `~-` | 中置 | range | around（範囲のその辺り） | 等差逆数列指定 |
+| 9 | `~*` | 中置 | range | around（範囲のその辺り） | 等比数列指定 |
+| 9 | `~/` | 中置 | range | around（範囲のその辺り） | 等比逆数列指定 |
+| 9 | `~^` | 中置 | range | around（範囲のその辺り） | 等冪数列指定 |
+| 10 ※ | `~` | 前置 | continuous | 〜末尾 | 連続リスト構築 |
+| 11 | `;` | 中置 | xor | 排他的関係 | 排他的論理和 |
+| 11 | `\|` | 中置 | or | または（通路） | 論理和（短絡評価） |
+| 12 | `&` | 中置 | and | かつ（結合） | 論理積（短絡評価） |
+| 13 | `!` | 前置 | not | 否定 | 論理否定 |
+| 14 | `<` | 中置 | less | より小さい | 比較演算 |
+| 14 | `<=` | 中置 | less_equal | 以下 | 比較演算 |
+| 14 | `=` | 中置 | equal | 等しい | 比較演算 |
+| 14 | `==` | 中置 | equal | 等しい | 比較演算 |
+| 14 | `>=` | 中置 | more_equal | 以上 | 比較演算 |
+| 14 | `>` | 中置 | more | より大きい | 比較演算 |
+| 14 | `!=` | 中置 | not_equal | 等しくない | 比較演算 |
+| 15 | `+` | 中置 | add | 加法 | 算術演算 |
+| 15 | `-` | 中置 | sub | 減法 | 算術演算 |
+| 16 | `*` | 中置 | mul | 乗法 | 算術演算 |
+| 16 | `/` | 中置 | div | 除法 | 算術演算 |
+| 16 | `%` | 中置 | mod | 剰余 | 算術演算 |
+| 17 | `^` | 中置※ | pow | 冪乗 | 指数演算 |
+| 18 | `!` | 後置 | factorial | 階乗 | 階乗演算 |
+| 19 | `\|...\|` | 囲み | abs | 絶対値 | 絶対値演算 |
+| 20 ※ | `~` | 後置 | expand | 冒頭〜 | 展開 |
+| 21 | `$` | 前置 | address | お金（価値の抽象化） | アドレス取得 |
+| 22 | `'` | 中置 | get | 所有格（'s のs省略） | 構造から値を取得 |
+| 22 | `@` | 中置※ | get | at（〜において） | 構造から値を取得 |
+| 23 | `@` | 前置 | input | at（〜において） | アドレスからデータを取得 |
+| 24 | `<<` | 中置 | 左ビットシフト | 左ビットシフト | 左ビットシフト |
+| 24 | `>>` | 中置 | 右ビットシフト | 右ビットシフト | 右ビットシフト |
+| 25 | `\|\|` | 中置 | bit or | ビットマスク | ビット毎の論理和 |
+| 26 | `;;` | 中置 | bit xor | ビットマスク | ビット毎の非交和 |
+| 27 | `&&` | 中置 | bit and | ビットマスク | ビット毎の論理積 |
+| 28 | `!!` | 前置 | bit not | ビット反転 | ビット毎の否定 |
+| 29 | `@` | 後置 | import | at（〜から） | ファイルから取得 |
+| 30 | `(...)` | 囲み | block | ブロック | インラインブロック構築 |
+| 30 | `{...}` | 囲み | block | ブロック | インラインブロック構築 |
+| 30 | `[...]` | 囲み | block | ブロック | インラインブロック構築 |
+| 30 | `	` | 前置 | indent | インデント | インデントブロック構築 |
+| 31 | `\\` | 前置 | escape | 文字化 | 直後の1文字を文字として扱う |
+
+
+※条件分岐は関数のブロック構文によって表現されるcompare_match_case式のみである。
+※関数合成を右結合で行いたい場合は、カッコを使用して明示する。
+※ループは関数の再帰呼び出しによって表現される。
+※副作用を伴う処理は、即時生成を伴うため、: 演算子は使用できない。
+※副作用を伴う処理は、documents\ja-jp\specification\system_semantics_ja-jp.md に従った副作用の記述を使用する。
+※この記述は、unsafe_perform_ioに相当することを念頭に置くこと。
+
+
+## 特殊記号
+
+| 記号 | 機能 | 自然な意味 | 操作的意味論 |
+|------|------|-----------|-------------|
+| `_` | unit | 見える無値（空の明示） | 空のリスト/恒等射/単位元 |
+
+## 設計哲学
+- **万人が理解できる記号**: 数学的厳密性より直感的理解を優先
+- **自然言語との対応**: プログラムが文章として読める
+- **予約語の排除**: 単語の意味の曖昧性を避け、記号の明確性を重視
+- **メタ言語としての機能**: 任意の言語パラダイムを関数として実装可能
+
+*/
+
+
+/* ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓　　構文解析用演算子テーブル　　↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ */
+
+/**
+ * 
+ * 設計を下にした実装用演算子テーブル
+ * 
+ * 構文解析は、空白を区切り記号と出来るため、余積演算子は不要と判断し、省略している。
+ * 
+ * 前置演算子は左側に前置演算子か空白が入ることを前提としている。
+ * 中置演算子は必ず両脇に空白が入ることを前提としている。
+ * 後置演算子は右側に後置演算子か空白が入ることを前提としている。
+ * 
+**/
+
+const parseTable = {
+    "#": { "precedence": Infinity, "notation": "prefix" },
+    "##": { "precedence": Infinity, "notation": "prefix" },
+    "###": { "precedence": Infinity, "notation": "prefix" },
+    ":": { "precedence": 2, "notation": "infix", "associativity": "right" },
+    "#": { "precedence": 3, "notation": "infix", "associativity": "left" },
+    ",": { "precedence": 6, "notation": "infix", "associativity": "right" },
+    "?": { "precedence": 5, "notation": "infix", "associativity": "right" },
+    "~": { "precedence": 9, "notation": "infix" },
+    "~+": { "precedence": 9, "notation": "infix" },
+    "~-": { "precedence": 9, "notation": "infix" },
+    "~*": { "precedence": 9, "notation": "infix" },
+    "~/": { "precedence": 9, "notation": "infix" },
+    "~^": { "precedence": 9, "notation": "infix" },
+    "~": { "precedence": Infinity, "notation": "prefix", "associativity": "right" },
+    ";": { "precedence": 11, "notation": "infix", "associativity": "left" },
+    "|": { "precedence": 12, "notation": "infix", "associativity": "left" },
+    "&": { "precedence": 13, "notation": "infix", "associativity": "left" },
+    "!": { "precedence": Infinity, "notation": "prefix", "associativity": "right" },
+    "<": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    "<=": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    "=": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    "==": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    ">=": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    ">": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    "!=": { "precedence": 14, "notation": "infix", "associativity": "left" },
+    "+": { "precedence": 15, "notation": "infix", "associativity": "left" },
+    "-": { "precedence": 15, "notation": "infix", "associativity": "left" },
+    "*": { "precedence": 16, "notation": "infix", "associativity": "left" },
+    "/": { "precedence": 16, "notation": "infix", "associativity": "left" },
+    "%": { "precedence": 16, "notation": "infix", "associativity": "left" },
+    "^": { "precedence": 17, "notation": "infix", "associativity": "right" },
+    "!": { "precedence": Infinity, "notation": "postfix", "associativity": "left" },
+    "~": { "precedence": Infinity, "notation": "postfix", "associativity": "left" },
+    "$": { "precedence": Infinity, "notation": "prefix", "associativity": "right" },
+    "'": { "precedence": 22, "notation": "infix", "associativity": "left" },
+    "@": { "precedence": 23, "notation": "infix", "associativity": "right" },
+    "@": { "precedence": Infinity, "notation": "prefix", "associativity": "right" },
+    "<<": { "precedence": 25, "notation": "infix", "associativity": "left" },
+    ">>": { "precedence": 25, "notation": "infix", "associativity": "left" },
+    "||": { "precedence": 26, "notation": "infix", "associativity": "left" },
+    ";;": { "precedence": 27, "notation": "infix", "associativity": "left" },
+    "&&": { "precedence": 28, "notation": "infix", "associativity": "left" },
+    "!!": { "precedence": Infinity, "notation": "prefix", "associativity": "right" },
+    "@": { "precedence": Infinity, "notation": "postfix" }
+}
+
+/* ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑　　構文解析用演算子テーブル　　↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑ */
+
+
+/* ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓　　意味論マッピングテーブル　　↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ */
+
+/**
+ * 
+ * 正引き、逆引き両対応の意味論マッピング表
+ * 
+ * 記号と意味論名の相互変換を行うためのマッピング表
+ * 意味論名は、Sign言語の内部表現や中間コードで使用される
+ * 意味論名は、記号の自然な意味と操作的意味論を反映した名前を採用している
+ * 
+ * 
+**/
+
+const semantics = {
+    "#_": "export",
+    "##_": "export_escapable",
+    "###_": "pin_export",
+    ":": "define",
+    "#": "output",
+    ",": "product",
+    "?": "lambda",
+    "~": "range",
+    "~+": "additiveRange",
+    "~-": "subtractRange",
+    "~*": "multiplyRange",
+    "~/": "divideRange",
+    "~^": "powerRange",
+    "~_": "rest",
+    "|": "or",
+    ";": "xor",
+    "&": "and",
+    "!_": "not",
+    "<": "less",
+    "<=": "lessEqual",
+    "=": "equal",
+    ">=": "greaterEqual",
+    ">": "greater",
+    "!=": "notEqual",
+    "+": "add",
+    "-": "subtract",
+    "*": "multiply",
+    "/": "division",
+    "%": "modulo",
+    "^": "power",
+    "_!": "factorial",
+    "$_": "place",
+    "'": "have",
+    "@": "at",
+    "_~": "spread",
+    "@_": "input",
+    "<<": "bitShiftLeft",
+    ">>": "bitShiftRight",
+    "||": "bitOr",
+    ";;": "bitXor",
+    "&&": "bitAnd",
+    "!!_": "bitNot",
+    "_@": "atRoot",
+    "export": "#_",
+    "export_escapable": "##_",
+    "pin_export": "###_",
+    "define": ":",
+    "output": "#",
+    "product": ",",
+    "lambda": "?",
+    "range": "~",
+    "additiveRange": "~+",
+    "subtractRange": "~-",
+    "multiplyRange": "~*",
+    "divideRange": "~/",
+    "powerRange": "~^",
+    "rest": "~_",
+    "or": "|",
+    "xor": ";",
+    "and": "&",
+    "not": "!_",
+    "less": "<",
+    "lessEqual": "<=",
+    "equal": "=",
+    "greaterEqual": ">=",
+    "greater": ">",
+    "notEqual": "!=",
+    "add": "+",
+    "subtract": "-",
+    "multiply": "*",
+    "division": "/",
+    "modulo": "%",
+    "power": "^",
+    "factorial": "_!",
+    "place": "$_",
+    "have": "'",
+    "at": "@",
+    "spread": "_~",
+    "input": "@_",
+    "bitShiftLeft": "<<",
+    "bitShiftRight": ">>",
+    "bitOr": "||",
+    "bitXor": ";;",
+    "bitAnd": "&&",
+    "bitNot": "!!_",
+    "atRoot": "_@"
+}
+
+/* ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑　　意味論マッピングテーブル　　↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑ */
+
+
+export default {
+    parseTable,
+    semantics
+}
