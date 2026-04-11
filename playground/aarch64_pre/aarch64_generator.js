@@ -15,7 +15,7 @@ export class AArch64Generator {
     this.code.push(line);
   }
 
-  generate(ast) {
+  generate(ast, config = {}) {
     this.code = [];
     this.floatConstCount = 0;
     this.floatConsts = [];
@@ -27,6 +27,14 @@ export class AArch64Generator {
     this.scopeOffsets = {};
     this.currentScopeSize = 0;
     this.collectVariables(ast);
+    
+    // ✨ Phase 14: Static Memory Pre-calculation
+    this.baseHeapSize = 16;
+    this.baseClosureSize = 16;
+    this.analyzeMemory(ast);
+    const recurBudget = config.recursionBuffer || 1024;
+    this.totalHeapSpace = this.baseHeapSize + (recurBudget * 64);
+    this.totalClosureSpace = this.baseClosureSize + (recurBudget * 32);
     
     // 16バイトアライメント
     const stackSize = (this.currentScopeSize + 15) & ~15;
@@ -70,10 +78,32 @@ export class AArch64Generator {
         if (this.vsp - 1 !== 0) {
             this.emit(`    fmov d0, d${this.vsp - 1}`);
         }
-        this.emit(`    fmov x1, d0  // Rawビット列を汎用レジスタにも渡す (デバッグ用)`);
+        this.emit(`    fmov x1, d0  // Rawビット列を判定用汎用レジスタへ移動`);
+        
+        // ✨ Phase 15: Polymorphic Print based on String Space Bounds
+        this.emit(`    adrp x2, string_space_start`);
+        this.emit(`    add x2, x2, :lo12:string_space_start`);
+        this.emit(`    adrp x3, string_space_end`);
+        this.emit(`    add x3, x3, :lo12:string_space_end`);
+        
+        this.emit(`    cmp x1, x2`);
+        this.emit(`    b.lt print_as_float`);
+        this.emit(`    cmp x1, x3`);
+        this.emit(`    b.ge print_as_float`);
+        
+        // String Route
+        this.emit(`    adrp x0, fmt_string`);
+        this.emit(`    add x0, x0, :lo12:fmt_string`);
+        this.emit(`    bl printf`);
+        this.emit(`    b end_print`);
+        
+        // Float Route
+        this.emit(`print_as_float:`);
+        this.emit(`    // print_float expects parameter in d0 for %f, but we also pass raw hex in x1`);
         this.emit(`    adrp x0, fmt_float`);
         this.emit(`    add x0, x0, :lo12:fmt_float`);
         this.emit(`    bl printf`);
+        this.emit(`end_print:`);
     }
 
     // エピローグ (終了コード0)
@@ -99,6 +129,15 @@ export class AArch64Generator {
     this.emit('    ldr x2, [x1]         // current heap_ptr');
     this.emit('    mov x3, x2           // save for return');
     this.emit('    add x2, x2, x0       // advance pointer');
+    this.emit('');
+    this.emit('    // ✨ Phase 14: Bounds check');
+    this.emit('    adrp x4, heap_space');
+    this.emit('    add x4, x4, :lo12:heap_space');
+    this.emit(`    ldr x5, =${this.totalHeapSpace}`);
+    this.emit('    add x4, x4, x5       // max limit');
+    this.emit('    cmp x2, x4');
+    this.emit('    b.gt _alloc_panic');
+    this.emit('');
     this.emit('    str x2, [x1]         // store new heap_ptr');
     this.emit('    mov x0, x3           // return original pointer');
     this.emit('    ret\n');
@@ -110,9 +149,26 @@ export class AArch64Generator {
     this.emit('    ldr x2, [x1]         // current closure_ptr');
     this.emit('    mov x3, x2           // save for return');
     this.emit('    add x2, x2, x0       // advance pointer');
+    this.emit('');
+    this.emit('    // ✨ Phase 14: Bounds check');
+    this.emit('    adrp x4, closure_space');
+    this.emit('    add x4, x4, :lo12:closure_space');
+    this.emit(`    ldr x5, =${this.totalClosureSpace}`);
+    this.emit('    add x4, x4, x5       // max limit');
+    this.emit('    cmp x2, x4');
+    this.emit('    b.gt _alloc_panic');
+    this.emit('');
     this.emit('    str x2, [x1]         // store new closure_ptr');
     this.emit('    mov x0, x3           // return original pointer');
     this.emit('    ret\n');
+    
+    this.emit('_alloc_panic:');
+    this.emit('    adrp x0, panic_msg');
+    this.emit('    add x0, x0, :lo12:panic_msg');
+    this.emit('    bl printf');
+    this.emit('    mov x0, #1');        // exit_code = 1
+    this.emit('    bl exit');           // use glibc exit()
+    this.emit('');
 
     this.emit('// --- runtime deep equality check ---');
     this.emit('// args: d0, d1');
@@ -130,16 +186,17 @@ export class AArch64Generator {
     this.emit('    add x2, x2, :lo12:heap_space');
     this.emit('    cmp x0, x2');
     this.emit('    b.lt val_eq_false       // d0 < heap_space');
-    this.emit('    add x3, x2, #1048576    // 1MB');
+    this.emit(`    ldr x4, =${this.totalHeapSpace}`);
+    this.emit('    add x3, x2, x4          // x3 = heap_space max');
     this.emit('    cmp x0, x3');
-    this.emit('    b.ge val_eq_false       // d0 >= heap_space + 1MB');
+    this.emit('    b.ge val_eq_false       // d0 >= heap_space max');
     this.emit('');
     this.emit('    // Check if d1 is pointer');
     this.emit('    fmov x1, d1');
     this.emit('    cmp x1, x2');
     this.emit('    b.lt val_eq_false       // d1 < heap_space');
     this.emit('    cmp x1, x3');
-    this.emit('    b.ge val_eq_false       // d1 >= heap_space + 1MB');
+    this.emit('    b.ge val_eq_false       // d1 >= heap_space max');
     this.emit('');
     this.emit('    // Both are heap pointers. Recurse.');
     this.emit('    stp x29, x30, [sp, #-32]!');
@@ -202,6 +259,8 @@ export class AArch64Generator {
     this.emit('.data');
     this.emit('.align 3');
     this.emit('fmt_float: .asciz "Float: %f | Raw(Hex): 0x%016llx\\n"');
+    this.emit('fmt_string: .asciz "String: %s\\n"');
+    this.emit('panic_msg: .asciz "Panic: Out of Memory! Static boundary exceeded.\\n"');
     this.emit('fc_nan: .double nan');
     this.emit('fc_inf: .double inf');
     
@@ -209,10 +268,14 @@ export class AArch64Generator {
         this.emit(`${fc.label}: .double ${fc.value}`);
     });
     
-    // ✨ Phase 8: Emit string constants
+    // ✨ Phase 15: Emit string constants with spatial bounds
+    this.emit('.align 3');
+    this.emit('string_space_start:');
     this.stringConsts.forEach((label, strVal) => {
         this.emit(`${label}: .asciz "${strVal}"`);
     });
+    this.emit('.align 3');
+    this.emit('string_space_end:');
 
     // 改行警告を防ぐため、最後に空行を入れる
     this.emit('');
@@ -221,12 +284,68 @@ export class AArch64Generator {
     this.emit('.bss');
     this.emit('.align 3');
     this.emit('heap_ptr: .skip 8');    // 現在のヒープの先頭アドレスを保持
-    this.emit('heap_space: .skip 1048576'); // 1MB の簡易ヒープ空間
+    this.emit(`heap_space: .skip ${this.totalHeapSpace}`); // ✨ 事前計算サイズ
     this.emit('closure_ptr: .skip 8'); // 現在のクロージャヒープの先頭アドレス
-    this.emit('closure_space: .skip 1048576'); // 1MB のクロージャ空間
+    this.emit(`closure_space: .skip ${this.totalClosureSpace}`); // ✨ 事前計算サイズ
     this.emit('');
 
     return this.code.join("\n");
+  }
+
+  analyzeMemory(node) {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      node.forEach(n => this.analyzeMemory(n));
+      return;
+    }
+
+    switch (node.type) {
+      case 'CommaNode':
+      case 'SequenceNode':
+        this.baseHeapSize += 16;
+        break;
+      case 'group': {
+        let body = node.body;
+        if (body && body.type === 'infix' && body.op === ',') {
+           const flattenCommas = (n) => {
+              if (!n) return [];
+              if (n.type === 'infix' && n.op === ',') {
+                 if (n.right && (n.right.value === 'nan' || n.right.name === 'nan')) return [...flattenCommas(n.left)];
+                 return [...flattenCommas(n.left), ...flattenCommas(n.right)];
+              }
+              return [n];
+           };
+           let elems = flattenCommas(body);
+           let kvPairs = [];
+           for(let i=0; i<elems.length - 1; i+=2) {
+              if (elems[i] && elems[i].type === 'string') {
+                  kvPairs.push({ key: elems[i].value, value: elems[i+1] });
+              }
+           }
+           if (kvPairs.length > 0) {
+               this.baseHeapSize += kvPairs.length * 8;
+           }
+        }
+        break;
+      }
+      case 'infix': {
+        if (node.op === ' ') {
+          this.baseHeapSize += 16; // Worst case fallback to Cons
+        }
+        if (node.op === '?') {
+          let paramName = node.left && node.left.type === 'identifier' ? node.left.value : "$tmp_arg";
+          let actualBody = node.right;
+          this.baseClosureSize += 16;
+          let freeVars = this.getFreeVariables(actualBody, [paramName]);
+          this.baseClosureSize += freeVars.length * 8;
+        }
+        break;
+      }
+    }
+    
+    ['left', 'right', 'func', 'arg', 'body', 'expr'].forEach(k => {
+       if (node[k]) this.analyzeMemory(node[k]);
+    });
   }
   getFreeVariables(node, initialBoundArray) {
     let freeVars = new Set();
@@ -245,10 +364,10 @@ export class AArch64Generator {
           traverse(n.left, bound);
           traverse(n.right, bound);
         }
-      } else if (n.type === 'block') {
+      } else if (n.type === 'block' || n.type === 'ModuleBlock') {
         (n.body || []).forEach(stmt => traverse(stmt, bound));
       } else {
-        ['left', 'right', 'expr', 'body'].forEach(key => {
+        ['left', 'right', 'expr', 'body', 'func', 'arg'].forEach(key => {
           if (n[key]) traverse(n[key], bound);
         });
       }
@@ -273,10 +392,16 @@ export class AArch64Generator {
 
         // ⚡ [Phase 7] もし右辺が辞書型（group等）であった場合、型のレイアウトを追跡する
         let actualRight = node.right;
+        
+        // リンカがモジュールをブロックとして置換している場合、最後の返り値ノードを調査する
+        if (actualRight && (actualRight.type === 'block' || actualRight.type === 'ModuleBlock') && Array.isArray(actualRight.body)) {
+             actualRight = actualRight.body[actualRight.body.length - 1]; // This is the group!
+        }
+        
         if (actualRight && actualRight.type === 'group' && actualRight.body && actualRight.body.op === ',') {
            const flattenCommas = (n) => {
               if (!n) return [];
-              if (n.type === 'infix' && n.op === ',') {
+              if ((n.type === 'infix' || n.type === 'CommaNode') && n.op === ',') {
                  if (n.right && (n.right.value === 'nan' || n.right.name === 'nan')) return [...flattenCommas(n.left)];
                  return [...flattenCommas(n.left), ...flattenCommas(n.right)];
               }
@@ -304,6 +429,7 @@ export class AArch64Generator {
     }
     if (node.left) this.collectVariables(node.left);
     if (node.right) this.collectVariables(node.right);
+    if (node.expr) this.collectVariables(node.expr);
     if (node.func) this.collectVariables(node.func);
     if (node.arg) this.collectVariables(node.arg);
     if (node.body) this.collectVariables(node.body);
@@ -327,12 +453,16 @@ export class AArch64Generator {
     this.emit(`    // [Node] ${node.type} ${nodeVal ? '(' + nodeVal + ')' : ''}`);
 
     switch (node.type) {
+      case 'block':
+      case 'ModuleBlock':
+        this.visit(node.body, isTail);
+        break;
       case 'group': {
           let body = node.body;
-          if (body && body.type === 'infix' && body.op === ',') {
+          if (body && (body.type === 'infix' || body.type === 'CommaNode') && body.op === ',') {
              const flattenCommas = (n) => {
                 if (!n) return [];
-                if (n.type === 'infix' && n.op === ',') {
+                if ((n.type === 'infix' || n.type === 'CommaNode') && n.op === ',') {
                    if (n.right && (n.right.value === 'nan' || n.right.name === 'nan')) return [...flattenCommas(n.left)];
                    return [...flattenCommas(n.left), ...flattenCommas(n.right)];
                 }
@@ -700,7 +830,7 @@ export class AArch64Generator {
           this.vsp = 0;
           
           let checkBody = actualBody && actualBody.type === 'group' ? actualBody.body : actualBody;
-          const isMatchBlock = checkBody && checkBody.type === 'block' &&
+          const isMatchBlock = checkBody && (checkBody.type === 'block' || checkBody.type === 'ModuleBlock') &&
               checkBody.body && checkBody.body.length > 0 &&
               checkBody.body[0].type === 'infix' && checkBody.body[0].op === ':';
 

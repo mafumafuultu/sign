@@ -1,9 +1,11 @@
 import fs from 'fs';
+import path from 'path';
 import util from 'util';
 import operators from './operators.js';
 import { parseSign } from './parser_browser.js';
 import { ASTNormalizer } from './ast_normalizer.js';
 import { AArch64Generator } from './aarch64_generator.js';
+import { Linker } from './linker.js';
 import { execSync } from 'child_process';
 
 const args = process.argv.slice(2);
@@ -32,11 +34,22 @@ try {
   process.exit(1);
 }
 
+console.log("\n--- Linking Modules ---");
+const linker = new Linker();
+let linkedAst;
+try {
+  let baseDir = path.dirname(path.resolve(sourceFile));
+  linkedAst = linker.link(ast, baseDir);
+} catch (e) {
+  console.error("Link Error:", e);
+  process.exit(1);
+}
+
 console.log("\n--- Normalizing AST ---");
 const normalizer = new ASTNormalizer();
 let normalizedAst;
 try {
-  normalizedAst = normalizer.normalize(ast);
+  normalizedAst = normalizer.normalize(linkedAst);
   // ASTダンプを全階層表示します (深さ制限を解除)
   console.log(util.inspect(normalizedAst, { showHidden: false, depth: null, colors: true }));
 } catch (e) {
@@ -73,7 +86,12 @@ try {
   console.log("\n[Execution Result]");
   console.log(result.trim());
 } catch (e) {
-  console.error("\n[WARNING] Execution failed.");
-  console.log("QEMUエミュレータが存在しない可能性があります。以下のコマンドをWSL環境で実行してインストールしてください:");
-  console.log("  wsl sudo apt-get update && wsl sudo apt-get install -y qemu-user");
+  console.error("\n[WARNING] Execution failed with code " + e.status);
+  if (e.stdout || e.stderr) {
+    if (e.stdout) console.log("Standard Output:\n" + e.stdout.toString().trim());
+    if (e.stderr) console.error("Standard Error:\n" + e.stderr.toString().trim());
+  } else {
+    console.log("QEMUエミュレータが存在しない可能性があります。以下のコマンドをWSL環境で実行してインストールしてください:");
+    console.log("  wsl sudo apt-get update && wsl sudo apt-get install -y qemu-user");
+  }
 }
