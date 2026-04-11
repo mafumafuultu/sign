@@ -367,7 +367,7 @@ export class AArch64Generator {
       } else if (n.type === 'block' || n.type === 'ModuleBlock') {
         (n.body || []).forEach(stmt => traverse(stmt, bound));
       } else {
-        ['left', 'right', 'expr', 'body', 'func', 'arg'].forEach(key => {
+        ['left', 'right', 'expr', 'body', 'func', 'arg', 'start', 'step', 'end'].forEach(key => {
           if (n[key]) traverse(n[key], bound);
         });
       }
@@ -433,6 +433,9 @@ export class AArch64Generator {
     if (node.func) this.collectVariables(node.func);
     if (node.arg) this.collectVariables(node.arg);
     if (node.body) this.collectVariables(node.body);
+    if (node.start) this.collectVariables(node.start);
+    if (node.step) this.collectVariables(node.step);
+    if (node.end) this.collectVariables(node.end);
   }
 
   visit(node, isTail = false) {
@@ -449,8 +452,8 @@ export class AArch64Generator {
       return;
     }
 
-    const nodeVal = node.value || node.name || node.op || '';
-    this.emit(`    // [Node] ${node.type} ${nodeVal ? '(' + nodeVal + ')' : ''}`);
+    const nodeVal = node.value !== undefined ? node.value : (node.name || node.op || '');
+    this.emit(`    // [Node] ${node.type} ${nodeVal !== '' ? '(' + nodeVal + ')' : ''}`);
 
     switch (node.type) {
       case 'block':
@@ -600,6 +603,108 @@ export class AArch64Generator {
            this.visit(pExpr);
         }
         break;
+      case 'RangeDemo': {
+        this.visit(node.start);
+        const startReg = this.vsp - 1;
+        this.visit(node.step);
+        const stepReg = this.vsp - 1;
+        this.visit(node.end);
+        const endReg = this.vsp - 1;
+
+        const loopId = this.lambdaCount++;
+        const L_start = `range_start_${loopId}`;
+        const L_end = `range_end_${loopId}`;
+        const L_alloc = `range_alloc_${loopId}`;
+        const L_positive = `range_pos_${loopId}`;
+        
+        this.emit(`    // === Range Generator ===`);
+        this.emit(`    sub sp, sp, #48`);
+        this.emit(`    stp x20, x21, [sp, #0]`);
+        this.emit(`    str x22, [sp, #16]`);
+        this.emit(`    stp d20, d21, [sp, #24]`);
+        this.emit(`    str d22, [sp, #40]`);
+
+        this.emit(`    fmov d20, d${startReg} // current`);
+        this.emit(`    fmov d21, d${stepReg} // step`);
+        this.emit(`    fmov d22, d${endReg} // end`);
+        this.emit(`    mov x20, 0 // root_ptr`);
+        this.emit(`    mov x21, 0 // prev_node`);
+        
+        // Zero step protection (Infinity loop prevention for ~+)
+        this.emit(`    fmov d30, xzr`);
+        this.emit(`    fcmp d21, d30 // if step == 0.0`);
+        this.emit(`    b.eq ${L_end}`);
+
+        // Determine direction by comparing start and end
+        this.emit(`    fcmp d20, d22`);
+        this.emit(`    b.gt 1f`);
+        this.emit(`    mov x22, 1 // Forward`);
+        this.emit(`    b ${L_start}`);
+        this.emit(`1:  mov x22, 0 // Backward`);
+        
+        this.emit(`${L_start}:`);
+        this.emit(`    cmp x22, 1`);
+        this.emit(`    b.eq ${L_positive}`);
+        // Backward Condition
+        this.emit(`    fcmp d20, d22`);
+        this.emit(`    b.lt ${L_end}`);
+        this.emit(`    b ${L_alloc}`);
+        // Forward Condition
+        this.emit(`${L_positive}:`);
+        this.emit(`    fcmp d20, d22`);
+        this.emit(`    b.gt ${L_end}`);
+        
+        this.emit(`${L_alloc}:`);
+        this.emit(`    mov x0, #16`);
+        this.emit(`    stp x29, x30, [sp, #-16]!`);
+        this.emit(`    bl _alloc`);
+        this.emit(`    ldp x29, x30, [sp], #16`);
+        
+        // Assign Value
+        this.emit(`    str d20, [x0]`);
+        this.emit(`    adrp x1, fc_nan`);
+        this.emit(`    add x1, x1, :lo12:fc_nan`);
+        this.emit(`    ldr d30, [x1]`);
+        this.emit(`    str d30, [x0, #8]`);
+        
+        // Link to List
+        this.emit(`    cmp x20, 0`);
+        this.emit(`    b.ne 1f`);
+        this.emit(`    mov x20, x0 // root_node = new_node`);
+        this.emit(`    b 2f`);
+        this.emit(`1:  str x0, [x21, #8] // prev.tail = new_node`);
+        this.emit(`2:  mov x21, x0 // prev_node = new_node`);
+        
+        // Advance current
+        if (node.op === '~+') this.emit(`    fadd d20, d20, d21`);
+        else if (node.op === '~-') this.emit(`    fsub d20, d20, d21`);
+        else if (node.op === '~*') this.emit(`    fmul d20, d20, d21`);
+        else if (node.op === '~/') this.emit(`    fdiv d20, d20, d21`);
+        else this.emit(`    fadd d20, d20, d21`);
+        
+        this.emit(`    b ${L_start}`);
+
+        this.emit(`${L_end}:`);
+        this.emit(`    cmp x20, 0`);
+        this.emit(`    b.ne 3f`);
+        this.emit(`    adrp x1, fc_nan`);
+        this.emit(`    add x1, x1, :lo12:fc_nan`);
+        this.emit(`    ldr d30, [x1]`);
+        this.emit(`    fmov x20, d30 // Empty List = NaN`);
+        this.emit(`3:`);
+        
+        // Return Result
+        this.vsp -= 2; // Keep startReg as result container
+        this.emit(`    fmov d${startReg}, x20`);
+        
+        // Restore Registers
+        this.emit(`    ldr d22, [sp, #40]`);
+        this.emit(`    ldp d20, d21, [sp, #24]`);
+        this.emit(`    ldr x22, [sp, #16]`);
+        this.emit(`    ldp x20, x21, [sp, #0]`);
+        this.emit(`    add sp, sp, #48`);
+        break;
+      }
       case 'CommaNode':
       case 'SequenceNode':
         this.visit(node.left);
