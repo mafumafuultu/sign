@@ -37,7 +37,7 @@ Definition
 
 Verification
   = Output
-  / Applicate         //関数適用
+  / Applicate_or_Compose         //関数適用
   / Construct         //ラムダ、リスト、辞書型の構築、関数合成
   / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
   / Expand            //展開する
@@ -47,7 +47,6 @@ Verification
   / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
-  / EOL*
 
 Comment = (SOL "`" [^\r\n]* EOL)
 
@@ -65,11 +64,11 @@ Define
   )
 
 Output
-  = (address / identifier / Address) __ "#" __ (Applicate / Output)
-  / Applicate
+  = (address / identifier / Address) __ "#" __ (Applicate_or_Compose / Output)
+  / Applicate_or_Compose
 
-Applicate
-  = (Closure / Get / function) (__ DirectProduct)*
+Applicate_or_Compose
+  = (Closure / Get / function) (__ Closure / Get / function)*
   / DirectProduct
 
 Construct
@@ -77,7 +76,6 @@ Construct
   / Closure
   / DirectProduct
   / DirectSum
-  / Compose
 
 Dictionary
   = name:identifier _ ":" _ (
@@ -127,15 +125,10 @@ DirectFold = _ infix _
 
 DirectProduct
   = DirectSum (_ "," _ DirectProduct)
-  / Compose
   / Sequence
   / Continuous
 
 DirectSum = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
-
-Compose
-  = (Closure / function) (__ (Closure / function))*
-  / Sequence
 
 Sequence //無限リストも表現可能
   = "[" SequenceInner "]"
