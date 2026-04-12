@@ -30,7 +30,7 @@ good_function_1 :
 
 ` 推奨パターン２：直接的な関数合成
 good_function_2 : input ?
-	process_step2 process_step1 input
+	process_step1 process_step2 input
 
 ```
 
