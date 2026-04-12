@@ -1,5 +1,6 @@
 export class AArch64Generator {
-  constructor(locals) {
+  constructor(locals, typeTable = null) {
+    this.typeTable = typeTable || { functions: {}, structs: {} };
     this.locals = locals;
     this.code = [];
     this.functions = []; // 関数ブロック用のアセンブリ出力
@@ -276,6 +277,20 @@ export class AArch64Generator {
     });
     this.emit('.align 3');
     this.emit('string_space_end:');
+
+    // ✨ Phase 19: Static Closures zero-cost allocation
+    this.emit('// --- Static Closures ---');
+    this.emit('.align 3');
+    this.emit('static_closures_start:');
+    if (this.staticClosures && this.staticClosures.length > 0) {
+        this.staticClosures.forEach(funcName => {
+            this.emit(`_closure_${funcName}:`);
+            this.emit(`    .quad ${funcName} // func_ptr`);
+            this.emit(`    .quad 0 // env_ptr (NULL)`);
+        });
+    }
+    this.emit('.align 3');
+    this.emit('static_closures_end:');
 
     // 改行警告を防ぐため、最後に空行を入れる
     this.emit('');
@@ -772,7 +787,7 @@ export class AArch64Generator {
         }
         
         if (node.op === "'") {
-           // Property Access
+           // Property / Array Access
            if (node.left.type === 'identifier' && (node.right.type === 'identifier' || node.right.type === 'string')) {
               const objName = node.left.value;
               const keyName = node.right.value.replace(/^[`'"]|[`'"]$/g, '');
@@ -785,14 +800,23 @@ export class AArch64Generator {
                   this.emit(`    // Static access to ${objName} '${keyName} (offset ${fieldOffset})`);
                   this.emit(`    fmov x0, d${objReg}`);
                   this.emit(`    ldr d${objReg}, [x0, #${fieldOffset}] // Load field`);
-              } else {
-                  this.emit(`    // Warning: Could not statically resolve property ${objName} '${keyName}`);
-                  this.emit(`    fmov d${this.vsp++}, xzr`); // fallback
+                  break;
               }
-           } else {
-               this.emit(`    // Warning: Unresolved dynamic property access`);
-               this.emit(`    fmov d${this.vsp++}, xzr`); // fallback
            }
+           
+           // Dynamic / Array Access (O(1))
+           this.emit(`    // === Dynamic Get/Array Access ===`);
+           this.visit(node.left);
+           const ptrReg = this.vsp - 1;
+           this.visit(node.right);
+           const idxReg = this.vsp - 1;
+           
+           this.emit(`    fmov x0, d${ptrReg} // load array/object base pointer`);
+           this.emit(`    fcvtzs x1, d${idxReg} // convert float index to int64`);
+           // load [x0 + x1 * 8]
+           this.emit(`    ldr d${ptrReg}, [x0, x1, LSL #3]`);
+           this.vsp--; // pop index (we keep pointer reg as result)
+           
            break;
         }
 
@@ -823,46 +847,58 @@ export class AArch64Generator {
           // キャプチャ対象（現在のスコープにあるもの）のみを抽出
           freeVars = freeVars.filter(v => this.scopeOffsets[v] !== undefined);
   
-          // --- Caller side: クロージャメモリの確保 ---
+          // Check static purity
+          const isPure = this.typeTable && this.typeTable.functions[node._staticFuncId] && this.typeTable.functions[node._staticFuncId].pure;
           const envSize = freeVars.length * 8;
-          this.emit(`    // === Closure Allocation for ${funcName} ===`);
-          this.emit(`    mov x0, #${16 + envSize}`);
-          this.emit(`    stp x29, x30, [sp, #-16]!`);
-          this.emit(`    bl _alloc_closure`);
-          this.emit(`    ldp x29, x30, [sp], #16`);
-          
-          this.emit(`    mov x9, x0 // x9 holds closure ptr`);
-          
-          // 実行ポインタ(+0)
-          this.emit(`    adrp x10, ${funcName}`);
-          this.emit(`    add x10, x10, :lo12:${funcName}`);
-          this.emit(`    str x10, [x9] // store function pointer at +0`);
-          
-          // 環境ポインタ(+8)
-          if (envSize > 0) {
-             this.emit(`    add x10, x9, #16`);
-             this.emit(`    str x10, [x9, #8] // store env pointer at +8`);
-          } else {
-             this.emit(`    str xzr, [x9, #8] // null env pointer`);
-          }
-          
-          // 環境変数のヒープコピー
-          freeVars.forEach((v, idx) => {
-             const offset = this.scopeOffsets[v];
-             this.emit(`    ldr d30, [sp, #${offset}]  // free var ${v}`);
-             this.emit(`    str d30, [x10, #${idx * 8}]`);
-          });
-  
-          // 追加: 自己再帰関数のKnot Tying (遅延パッチ)
-          const assignedName = node.assignedName;
-          if (assignedName && freeVars.includes(assignedName)) {
-             const idx = freeVars.indexOf(assignedName);
-             this.emit(`    // Knot Tying: set self pointer to ${assignedName}`);
-             this.emit(`    fmov d30, x9 // d30 = closure ptr itself`);
-             this.emit(`    str d30, [x10, #${idx * 8}] // Overwrite its own env slot`);
-          }
 
-          this.emit(`    fmov d${this.vsp++}, x9 // push closure ptr as result`);
+          if (isPure) {
+              this.emit(`    // === Static Closure (Zero-Cost Allocation) for ${funcName} ===`);
+              this.emit(`    adrp x9, _closure_${funcName}`);
+              this.emit(`    add x9, x9, :lo12:_closure_${funcName}`);
+              this.emit(`    fmov d${this.vsp++}, x9 // push static closure ptr as result`);
+              if (!this.staticClosures) this.staticClosures = [];
+              this.staticClosures.push(funcName);
+          } else {
+              // --- Caller side: クロージャメモリの確保 ---
+              this.emit(`    // === Closure Allocation for ${funcName} ===`);
+              this.emit(`    mov x0, #${16 + envSize}`);
+              this.emit(`    stp x29, x30, [sp, #-16]!`);
+              this.emit(`    bl _alloc_closure`);
+              this.emit(`    ldp x29, x30, [sp], #16`);
+              
+              this.emit(`    mov x9, x0 // x9 holds closure ptr`);
+              
+              // 実行ポインタ(+0)
+              this.emit(`    adrp x10, ${funcName}`);
+              this.emit(`    add x10, x10, :lo12:${funcName}`);
+              this.emit(`    str x10, [x9] // store function pointer at +0`);
+              
+              // 環境ポインタ(+8)
+              if (envSize > 0) {
+                 this.emit(`    add x10, x9, #16`);
+                 this.emit(`    str x10, [x9, #8] // store env pointer at +8`);
+              } else {
+                 this.emit(`    str xzr, [x9, #8] // null env pointer`);
+              }
+              
+              // 環境変数のヒープコピー
+              freeVars.forEach((v, idx) => {
+                 const offset = this.scopeOffsets[v];
+                 this.emit(`    ldr d30, [sp, #${offset}]  // free var ${v}`);
+                 this.emit(`    str d30, [x10, #${idx * 8}]`);
+              });
+      
+              // 追加: 自己再帰関数のKnot Tying (遅延パッチ)
+              const assignedName = node.assignedName;
+              if (assignedName && freeVars.includes(assignedName)) {
+                 const idx = freeVars.indexOf(assignedName);
+                 this.emit(`    // Knot Tying: set self pointer to ${assignedName}`);
+                 this.emit(`    fmov d30, x9 // d30 = closure ptr itself`);
+                 this.emit(`    str d30, [x10, #${idx * 8}] // Overwrite its own env slot`);
+              }
+
+              this.emit(`    fmov d${this.vsp++}, x9 // push closure ptr as result`);
+          }
   
           // --- Lambda side: 関数本体のアセンブリ構築 ---
           const prevCode = this.code;
@@ -1144,18 +1180,30 @@ export class AArch64Generator {
 
             case ' ': { // 関数適用 または Cons 化の動的ディスパッチ
               const applyId = this.applyCount++;
-              this.emit(`    // --- Apply or Cons Dispatch (ID: ${applyId}) ---`);
+              // --- Apply or Cons Dispatch (ID: ${applyId}) ---
               this.emit(`    fmov x0, d${leftReg} // LHS pointer/value`);
               
-              // closure_space 領域かチェック
+              // 1. Static Closure bounding check
+              this.emit(`    adrp x3, static_closures_start`);
+              this.emit(`    add x3, x3, :lo12:static_closures_start`);
+              this.emit(`    cmp x0, x3`);
+              this.emit(`    blt apply_not_closure_${applyId} // Too low`);
+              this.emit(`    adrp x4, static_closures_end`);
+              this.emit(`    add x4, x4, :lo12:static_closures_end`);
+              this.emit(`    cmp x0, x4`);
+              this.emit(`    blt is_a_closure_${applyId}`);
+              
+              // 2. Dynamic closure bounding check
               this.emit(`    adrp x1, closure_space`);
               this.emit(`    add x1, x1, :lo12:closure_space`);
               this.emit(`    cmp x0, x1`);
-              this.emit(`    blt apply_not_closure_${applyId} // If LHS < closure_space, not a closure`);
-              this.emit(`    add x2, x1, #1048576`); // 1MB size
+              this.emit(`    blt apply_not_closure_${applyId} // Between static and dynamic? Not a closure`);
+              this.emit(`    ldr x2, =${this.totalClosureSpace}`);
+              this.emit(`    add x2, x1, x2`);
               this.emit(`    cmp x0, x2`);
-              this.emit(`    bge apply_not_closure_${applyId} // If LHS >= closure_space + 1MB, not a closure`);
-    
+              this.emit(`    bge apply_not_closure_${applyId} // Too high`);
+              
+              this.emit(`is_a_closure_${applyId}:`);
               // --- 関数である場合: 呼び出し ---
               this.emit(`    ldr x2, [x0] // func_ptr from +0`);
               this.emit(`    ldr x9, [x0, #8] // env_ptr from +8`);

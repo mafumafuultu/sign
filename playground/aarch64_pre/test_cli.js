@@ -6,6 +6,7 @@ import { parseSign } from './parser_browser.js';
 import { ASTNormalizer } from './ast_normalizer.js';
 import { AArch64Generator } from './aarch64_generator.js';
 import { Linker } from './linker.js';
+import { StaticAnalyzer } from './static_analyzer.js';
 import { execSync } from 'child_process';
 
 const args = process.argv.slice(2);
@@ -57,8 +58,22 @@ try {
   process.exit(1);
 }
 
+console.log("\n--- Static Analysis (TypeTable Generation) ---");
+const analyzer = new StaticAnalyzer();
+let typeTable;
+try {
+  typeTable = analyzer.analyze(normalizedAst);
+  const ttJson = JSON.stringify(typeTable, (k, v) => k === 'nodeRef' ? undefined : v, 2);
+  fs.writeFileSync('type_table.json', ttJson);
+  console.log("-> Saved to type_table.json. Pure Functions detected:", 
+      Object.keys(typeTable.functions).filter(k => typeTable.functions[k].pure).length);
+} catch (e) {
+  console.error("Static Analysis Error:", e);
+  process.exit(1);
+}
+
 console.log("\n--- Generating AArch64 Assembly ---");
-const generator = new AArch64Generator();
+const generator = new AArch64Generator(null, typeTable);
 let asmCode = "";
 try {
   asmCode = generator.generate(normalizedAst);
