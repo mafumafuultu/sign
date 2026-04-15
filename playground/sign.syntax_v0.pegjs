@@ -27,17 +27,11 @@ Program = Expression (EOL Expression)*
 
 Expression
   = Comment
-  / SOL Definition
-  / Verification EOL
+  / Export
   / ""
-
-Definition
-  = Export            //エクスポート
-  / Define            //定義（名前を付けてオブジェクトを束縛する）
 
 Verification
   = Output
-  / Applicate_or_Compose         //関数適用
   / Construct         //ラムダ、リスト、辞書型の構築、関数合成
   / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
   / Expand            //展開する
@@ -52,50 +46,25 @@ Comment = (SOL "`" [^\r\n]* EOL)
 
 Export = ("###" / "##" / "#")? Define
 
-Define
-  = name:identifier _ ":" _ (
-      string { typeTable[name] = "string"; }
-    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
-    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
-    / (PointFree / Lambda)  { typeTable[name] = "function"; }
-    / Verification
-    / Atom
-    / Define
-  )
+Define = SOL identifier _ ":" _ (Lambda / Construct / Calculate / Atom / Define) EOL
 
 Output
-  = (address / identifier / Address) __ "#" __ (Applicate_or_Compose / Output)
-  / Applicate_or_Compose
+  = (Address / address / identifier) __ ("#" __ Output)+
+  / Lambda
 
-Applicate_or_Compose
-  = (Closure / Get / function) (__ Closure / Get / function)*
-  / DirectProduct
+Lambda
+  = Arguments _ "?" _ (Output / Lambda)+
+  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)+ Dedent
+  / Construct
+  / Calculate
 
 Construct
   = Dictionary
-  / Closure
-  / DirectProduct
-  / DirectSum
+  / Product
+  / Sequence
+  / Coproduct
 
-Dictionary
-  = name:identifier _ ":" _ (
-     string { typeTable[name] = "string"; }
-    / EOL Expand EOL { typeTable[name] = {...dict}; }
-    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
-    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
-    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
-    / Verification
-    / Atom
-  )
-
-Closure
-  = "[" (Lambda / PointFree) "]"
-  / "{" (Lambda / PointFree) "}"
-  / "(" (Lambda / PointFree) ")"
-
-Lambda
-  = Arguments _ "?" _ (Output / Lambda)
-  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)* Dedent
+Dictionary = Indent ((identifier "~"? / string) _ ":"  (Lambda / Atom / Dictionary))+ Dedent
 
 Arguments = Continuous / Defaultive
 
@@ -104,7 +73,7 @@ Defaultive
   / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
   / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
 
-Match_Case = Calculate ":" Verification
+Match_Case = Indent (Calculate ":" (Calculate / Dictionary / Lambda))+ Dedent
 
 PointFree
   = DirectMap
@@ -123,12 +92,12 @@ Normal
 
 DirectFold = _ infix _
 
-DirectProduct
-  = DirectSum (_ "," _ DirectProduct)
+Product
+  = Coproduct (_ "," _ Product)
   / Sequence
   / Continuous
 
-DirectSum = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
+Coproduct = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
 
 Sequence //無限リストも表現可能
   = "[" SequenceInner "]"
