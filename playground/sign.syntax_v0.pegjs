@@ -23,12 +23,11 @@ SOL = &{ return location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = Expression (EOL Expression)*
+Program = (SOL Expression EOL)*
 
 Expression
   = Comment
   / Export
-  / ""
 
 Verification
   = Output
@@ -42,21 +41,24 @@ Verification
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
 
-Comment = (SOL "`" [^\r\n]* EOL)
+Comment = ("`" [^\r\n]*) {return ""}
 
 Export = ("###" / "##" / "#")? Define
 
-Define = SOL identifier _ ":" _ (Lambda / Construct / Calculate / Atom / Define) EOL
-
-Output
-  = (Address / address / identifier) __ ("#" __ Output)+
+Define
+  = identifier _ ":" _ Define*
   / Lambda
 
 Lambda
-  = Arguments _ "?" _ (Output / Lambda)+
-  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)+ Dedent
+  = Arguments _ "?" _ Lambda
+  / Arguments _ "?" Match_Case+
+  / PointFree
+  / Output
   / Construct
-  / Calculate
+
+Output
+  = (Address / address / identifier) (__ "#" __ Lambda)+
+  / Construct
 
 Construct
   = Dictionary
@@ -64,17 +66,17 @@ Construct
   / Sequence
   / Coproduct
 
-Dictionary = Indent ((identifier "~"? / string) _ ":"  (Lambda / Atom / Dictionary))+ Dedent
+Dictionary = Indent ((identifier "~"? / string) _ ":"  (Lambda / Atom / Construct))+ Dedent
 
 Arguments = Continuous / Defaultive
 
 Defaultive
-  = "[" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "]"
-  / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
+  = "[" EOL Indent (identifier (_ ":" _ Verification EOL)?)+ Dedent "]"
+  / "{" EOL Indent (identifier (_ ":" _ Verification EOL)?)+ Dedent "}"
   / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
 
 Match_Case = Indent (Calculate ":" (Calculate / Dictionary / Lambda))+ Dedent
-
+ 
 PointFree
   = DirectMap
   / Normal
