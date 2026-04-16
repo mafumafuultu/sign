@@ -1,7 +1,4 @@
 {
-  let typeTable = {
-  };
-
   let context = {
     indentStack : [],
     indent : ""
