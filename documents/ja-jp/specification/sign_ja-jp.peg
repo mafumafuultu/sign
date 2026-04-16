@@ -1,21 +1,10 @@
-{
-  let typeTable = {
-  };
-
-  let context = {
-    indentStack : [],
-    indent : ""
-  };
-}
-
-
 Start = Program
 
 //空白必須
-__ = sp:" "+ { return }
+__ = sp:" "+
 
 //空白可
-_ = " "* { return }
+_ = " "*
 
 //行頭
 SOL = &{ return location().start.column === 1; }
@@ -23,91 +12,51 @@ SOL = &{ return location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = Expression
+Program = (SOL Expression EOL)*
 
 Expression
-  = SOL Definition (EOL+ (SOL Definition EOL+)* / (EOL+ Verification)*)
-  / Verification ((EOL+ Verification)* / (EOL+ (SOL Definition EOL+))*)
-  / Comment
-  / EOL*
-  / ""
+  = Comment
+  / Export
 
-Definition
-  = Export            //エクスポート
-  / Define            //定義（名前を付けてオブジェクトを束縛する）
-
-Verification
-  = Output
-  / Applicate         //関数適用
-  / Construct         //ラムダ、リスト、辞書型の構築、関数合成
-  / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
-  / Expand            //展開する
-  / Address           //メモリアドレスの取得
-  / Get               //辞書型やリストの中から値を取得
-  / Compute           //Bit演算だけ行う
-  / Input             //アドレスから値を取得
-  / Import            //別ファイルからのインポート
-  / Block             //式のブロック
-
-Comment = (SOL "`" [^\r\n]* EOL)*
+Comment = ("`" [^\r\n]*) {return ""}
 
 Export = ("###" / "##" / "#")? Define
 
 Define
-  = name:identifier _ ":" _ (
-      string { typeTable[name] = "string"; }
-    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
-    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
-    / (PointFree / Lambda)  { typeTable[name] = "function"; }
-    / Verification
-    / Atom
-    / Define
-  )
+  = identifier _ ":" _ Define
+  / Lambda
+
+Lambda
+  = Arguments _ "?" _ Lambda
+  / Arguments _ "?" Match_Case+
+  / PointFree
+  / Output
+  / Construct
 
 Output
-  = (address / identifier / Address) __ "#" __ (Applicate / Output)
-  / Applicate
-
-Applicate
-  = (Closure / Get / function) (__ DirectProduct)*
-  / DirectProduct
+  = (address / identifier) (__ "#" __ Lambda)+
+  / Construct
 
 Construct
   = Dictionary
-  / Closure
-  / DirectProduct
-  / DirectSum
-  / Compose
+  / Product
+  / Sequence
+  / Coproduct
 
-Dictionary
-  = name:identifier _ ":" _ (
-     string { typeTable[name] = "string"; }
-    / EOL Expand EOL { typeTable[name] = {...dict}; }
-    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
-    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
-    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
-    / Verification
-    / Atom
-  )
+Dictionary = Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
 
-Closure
-  = "[" (Lambda / PointFree) "]"
-  / "{" (Lambda / PointFree) "}"
-  / "(" (Lambda / PointFree) ")"
-
-Lambda
-  = Arguments _ "?" _ (Output / Lambda)
-  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)* Dedent
-
-Arguments = Continuous / Defaultive
+Arguments = Inline / Defaultive
 
 Defaultive
-  = "[" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "]"
-  / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
-  / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
+  = "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "]"
+  / "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "}"
+  / "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent ")"
 
-Match_Case = Calculate ":" Verification
+Inline
+  = identifier (__ "~"? identifier)*
 
+Match_Case = Indent (Calculate ":" (Calculate / Dictionary / Lambda))+ Dedent
+ 
 PointFree
   = DirectMap
   / Normal
@@ -123,19 +72,13 @@ Normal
   = (number / address / register) _ infix
   / infix _ (number / address / register)
 
-DirectFold = _ infix _
+DirectFold = infix
 
-DirectProduct
-  = DirectSum (_ "," _ DirectProduct)
-  / Compose
+Product
+  = Coproduct (_ "," _ Product)
   / Sequence
-  / Continuous
 
-DirectSum = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
-
-Compose
-  = (Closure / function) (__ (Closure / function))*
-  / Sequence
+Coproduct = (Sequence / Calculate) (__ (Sequence / Calculate))*
 
 Sequence //無限リストも表現可能
   = "[" SequenceInner "]"
@@ -149,13 +92,10 @@ SequenceInner
   / (number / Arithmetic) __ "~"
   / "~" __ (number / Arithmetic)
 
-Continuous = "~"? Calculate (__ "~"? Calculate)*
-
 Calculate = Logical_Xor
 Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
 Logical_Or = Logical_And (__ "|" __ Logical_And)*
-Logical_And = Logical_Not (_ "&" _ Logical_Not)*
-Logical_Not = "!"? Compare
+Logical_And = Compare (_ "&" _ Compare)*
 
 Compare = Arithmetic (_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmetic)*
 
@@ -165,43 +105,24 @@ Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
 Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
 
 Expornential
-  = Factorial _ "^" _ Expornential
-  / Factorial
-
-Factorial = Absolute "!"?
+  = Absolute _ "^" _ Expornential
+  / Absolute
 
 Absolute
   = "|" (Additive / CalculateBlock) "|"
   / CalculateBlock
 
 CalculateBlock
-  = "[" Calculate "]"
-  / "{" Calculate "}"
-  / "(" Calculate ")"
-  / number
-  / identifier
-  / Expand
+  = "[" Coproduct "]"
+  / "{" Coproduct "}"
+  / "(" Coproduct ")"
   / Get
 
-Expand
-  = (identifier / dictionary / list / string) "~"
-  / StringTypeExpand
-
-StringTypeExpand
-  = stringType "~"
-  / string "~"
-
 Get
-  = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
-  / list ( _ "'" _ (number / identifier / Sequence))
-  / (identifier / string / StringTypeExpand) __ "@" __ Get
-  / Address
-
-Address
-  = address
-  / "$"? Input
-
-Input = "@"? Compute
+  = (identifier / Dictionary) (_ "'" _ (identifier "~"? / string))*
+  / identifier ( _ "'" _ (Product / Sequence / number / identifier))*
+  / (identifier "~"? / string) __ "@" __ Get
+  / Compute
 
 Compute = BitShift
 
@@ -211,13 +132,17 @@ BitXor = BitAnd (_ ";;" _ BitAnd)*
 BitAnd = BitNot (_ "&&" _ BitNot)*
 BitNot = "!!"? (address / register)
 
-Import = (identifier / string / StringTypeExpand) "@"
+Prefix
+  = prefix* Postfix
+
+Postfix
+  = Block postfix*
 
 Block
-  = "[" Verification "]"
-  / "{" Verification "}"
-  / "(" Verification ")"
-  / Indent Verification Dedent
+  = "[" Expression* "]"
+  / "{" Expression* "}"
+  / "(" Expression* ")"
+  / Indent Expression* Dedent
   / Atom
 
 Atom
@@ -226,10 +151,6 @@ Atom
   / address
   / register
   / unicode
-  / function
-  / dictionary
-  / list
-  / stringType
   / identifier
   / unit
 
@@ -260,18 +181,6 @@ unicode = $("0u" Hex+)
 // 6. 識別子（変数名など）
 identifier = $([a-zA-Z_][a-zA-Z0-9_]*)
 
-function
-  = name:identifier &{ return typeTable[name] === "function"; }
-
-dictionary
-  = name:identifier &{ return typeTable[name] && typeTable[name].constructor === Object; }
-
-list
-  = name:identifier &{ return Array.isArray(typeTable[name]); }
-
-stringType
-  = name:identifier &{ return typeTable[name] === "string"; }
-
 Hex = [0-9a-fA-F]
 
 prefix
@@ -289,36 +198,6 @@ infix
 
 unit = "_"
 
-Indent = tab:[\t]+ &{
-// 現在のインデントレベル（スタックのトップ）を取得
-  const currentIndentLength = context.indentStack.length > 0 
-    ? context.indentStack[context.indentStack.length - 1] 
-    : 0;
-  
-  // 読み込んだタブの数が現在のインデントより深いかチェック
-  if (tab.length > currentIndentLength) {
-    context.indentStack.push(tab.length);
-    context.indent = tab.join("");
-    return true; // マッチ成功
-  }
-  return false; // マッチ失敗（インデントされていない）
-}
+Indent = tab:[\t]+ &{}
 
-Dedent = &{
-// 実際には文字を消費せず（&述語）、インデントが浅くなったことを検知するロジック
-  // 次の行のタブ数を先読みして、スタックをpopするような処理が必要になります。
-  
-  // ※ ここは少し工夫が必要で、通常は行頭のパース時に先読み (lookahead) して、
-  // 現在のスタックトップよりもタブが少なければ pop しつつマッチ成功とする、という形にします。
-  
-  // とりあえず pop するだけのプレースホルダー
-  if (context.indentStack.length > 0) {
-     context.indentStack.pop();
-     const newLen = context.indentStack.length > 0 
-        ? context.indentStack[context.indentStack.length - 1] 
-        : 0;
-     context.indent = "\t".repeat(newLen);
-     return true;
-  }
-  return false;
-}
+Dedent = &{}

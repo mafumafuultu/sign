@@ -51,7 +51,7 @@ Construct
   / Sequence
   / Coproduct
 
-Dictionary = Indent ((identifier "~"? / string) _ ":"  (Lambda / Atom / Construct))+ Dedent
+Dictionary = Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
 
 Arguments = Inline / Defaultive
 
