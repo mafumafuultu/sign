@@ -29,24 +29,12 @@ Expression
   = Comment
   / Export
 
-Verification
-  = Output
-  / Construct         //ラムダ、リスト、辞書型の構築、関数合成
-  / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
-  / Expand            //展開する
-  / Address           //メモリアドレスの取得
-  / Get               //辞書型やリストの中から値を取得
-  / Compute           //Bit演算だけ行う
-  / Input             //アドレスから値を取得
-  / Import            //別ファイルからのインポート
-  / Block             //式のブロック
-
 Comment = ("`" [^\r\n]*) {return ""}
 
 Export = ("###" / "##" / "#")? Define
 
 Define
-  = identifier _ ":" _ Define*
+  = identifier _ ":" _ Define
   / Lambda
 
 Lambda
@@ -57,7 +45,7 @@ Lambda
   / Construct
 
 Output
-  = (Address / address / identifier) (__ "#" __ Lambda)+
+  = (address / identifier) (__ "#" __ Lambda)+
   / Construct
 
 Construct
@@ -68,12 +56,16 @@ Construct
 
 Dictionary = Indent ((identifier "~"? / string) _ ":"  (Lambda / Atom / Construct))+ Dedent
 
-Arguments = Continuous / Defaultive
+Arguments = Inline / Defaultive
+
 
 Defaultive
-  = "[" EOL Indent (identifier (_ ":" _ Verification EOL)?)+ Dedent "]"
-  / "{" EOL Indent (identifier (_ ":" _ Verification EOL)?)+ Dedent "}"
-  / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
+  = "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "]"
+  / "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "}"
+  / "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent ")"
+
+Inline
+  = identifier (__ "~"? identifier)*
 
 Match_Case = Indent (Calculate ":" (Calculate / Dictionary / Lambda))+ Dedent
  
@@ -92,14 +84,13 @@ Normal
   = (number / address / register) _ infix
   / infix _ (number / address / register)
 
-DirectFold = _ infix _
+DirectFold = infix
 
 Product
   = Coproduct (_ "," _ Product)
   / Sequence
-  / Continuous
 
-Coproduct = (Continuous / Sequence / Calculate) (__ (Continuous / Sequence / Calculate))*
+Coproduct = (Sequence / Calculate) (__ (Sequence / Calculate))*
 
 Sequence //無限リストも表現可能
   = "[" SequenceInner "]"
@@ -113,13 +104,10 @@ SequenceInner
   / (number / Arithmetic) __ "~"
   / "~" __ (number / Arithmetic)
 
-Continuous = "~"? Calculate (__ "~"? Calculate)*
-
 Calculate = Logical_Xor
 Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
 Logical_Or = Logical_And (__ "|" __ Logical_And)*
-Logical_And = Logical_Not (_ "&" _ Logical_Not)*
-Logical_Not = "!"? Compare
+Logical_And = Compare (_ "&" _ Compare)*
 
 Compare = Arithmetic (_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmetic)*
 
@@ -129,43 +117,24 @@ Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
 Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
 
 Expornential
-  = Factorial _ "^" _ Expornential*
-  / Factorial
-
-Factorial = Absolute "!"?
+  = Absolute _ "^" _ Expornential
+  / Absolute
 
 Absolute
   = "|" (Additive / CalculateBlock) "|"
   / CalculateBlock
 
 CalculateBlock
-  = "[" Calculate "]"
-  / "{" Calculate "}"
-  / "(" Calculate ")"
-  / number
-  / identifier
-  / Expand
+  = "[" Coproduct "]"
+  / "{" Coproduct "}"
+  / "(" Coproduct ")"
   / Get
 
-Expand
-  = (identifier / dictionary / list / string) "~"
-  / StringTypeExpand
-
-StringTypeExpand
-  = stringType "~"
-  / string "~"
-
 Get
-  = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
-  / list ( _ "'" _ (number / identifier / Sequence))
-  / (identifier / string / StringTypeExpand) __ "@" __ Get
-  / Address
-
-Address
-  = address
-  / "$"? Input
-
-Input = "@"? Compute
+  = (identifier / Dictionary) (_ "'" _ (identifier "~"? / string))*
+  / identifier ( _ "'" _ (Product / Sequence / number / identifier))*
+  / (identifier "~"? / string) __ "@" __ Get
+  / Compute
 
 Compute = BitShift
 
@@ -175,13 +144,17 @@ BitXor = BitAnd (_ ";;" _ BitAnd)*
 BitAnd = BitNot (_ "&&" _ BitNot)*
 BitNot = "!!"? (address / register)
 
-Import = (identifier / string / StringTypeExpand) "@"
+Prefix
+  = prefix* Postfix
+
+Postfix
+  = Block postfix*
 
 Block
-  = "[" Verification "]"
-  / "{" Verification "}"
-  / "(" Verification ")"
-  / Indent Verification Dedent
+  = "[" Expression* "]"
+  / "{" Expression* "}"
+  / "(" Expression* ")"
+  / Indent Expression* Dedent
   / Atom
 
 Atom
@@ -190,10 +163,6 @@ Atom
   / address
   / register
   / unicode
-  / function
-  / dictionary
-  / list
-  / stringType
   / identifier
   / unit
 
@@ -223,18 +192,6 @@ unicode = $("0u" Hex+)
 
 // 6. 識別子（変数名など）
 identifier = $([a-zA-Z_][a-zA-Z0-9_]*)
-
-function
-  = name:identifier &{ return typeTable[name] === "function"; }
-
-dictionary
-  = name:identifier &{ return typeTable[name] && typeTable[name].constructor === Object; }
-
-list
-  = name:identifier &{ return Array.isArray(typeTable[name]); }
-
-stringType
-  = name:identifier &{ return typeTable[name] === "string"; }
 
 Hex = [0-9a-fA-F]
 
