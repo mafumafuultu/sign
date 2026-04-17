@@ -138,8 +138,7 @@ Compute = BitShift
 BitShift = BitOr (_ ("<<" / ">>") _ BitOr)*
 BitOr = BitXor (_ "||" _ BitXor)*
 BitXor = BitAnd (_ ";;" _ BitAnd)*
-BitAnd = BitNot (_ "&&" _ BitNot)*
-BitNot = "!!"? (address / register)
+BitAnd = Prefix (_ "&&" _ Prefix)*
 
 Prefix
   = prefix* Postfix
