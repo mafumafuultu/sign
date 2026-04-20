@@ -1,10 +1,18 @@
+{
+  let context = {
+    indentStack : [],
+    indent : ""
+  };
+}
+
+
 Start = Program
 
 //空白必須
-__ = sp:" "+
+__ = sp:" "+ { return }
 
 //空白可
-_ = " "*
+_ = " "* { return }
 
 //行頭
 SOL = &{ return location().start.column === 1; }
@@ -46,6 +54,7 @@ Construct
 Dictionary = Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
 
 Arguments = Inline / Defaultive
+
 
 Defaultive
   = "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "]"
@@ -129,14 +138,14 @@ Compute = BitShift
 BitShift = BitOr (_ ("<<" / ">>") _ BitOr)*
 BitOr = BitXor (_ "||" _ BitXor)*
 BitXor = BitAnd (_ ";;" _ BitAnd)*
-BitAnd = BitNot (_ "&&" _ BitNot)*
-BitNot = "!!"? (address / register)
-
-Prefix
-  = prefix* Postfix
+BitAnd = Postfix (_ "&&" _ Postfix)*
 
 Postfix
-  = Block postfix*
+  = Prefix postfix*
+
+Prefix
+  = prefix Prefix
+  / Block
 
 Block
   = "[" Expression* "]"
@@ -198,6 +207,36 @@ infix
 
 unit = "_"
 
-Indent = tab:[\t]+ &{}
+Indent = tab:[\t]+ &{
+// 現在のインデントレベル（スタックのトップ）を取得
+  const currentIndentLength = context.indentStack.length > 0 
+    ? context.indentStack[context.indentStack.length - 1] 
+    : 0;
+  
+  // 読み込んだタブの数が現在のインデントより深いかチェック
+  if (tab.length > currentIndentLength) {
+    context.indentStack.push(tab.length);
+    context.indent = tab.join("");
+    return true; // マッチ成功
+  }
+  return false; // マッチ失敗（インデントされていない）
+}
 
-Dedent = &{}
+Dedent = &{
+// 実際には文字を消費せず（&述語）、インデントが浅くなったことを検知するロジック
+  // 次の行のタブ数を先読みして、スタックをpopするような処理が必要になります。
+  
+  // ※ ここは少し工夫が必要で、通常は行頭のパース時に先読み (lookahead) して、
+  // 現在のスタックトップよりもタブが少なければ pop しつつマッチ成功とする、という形にします。
+  
+  // とりあえず pop するだけのプレースホルダー
+  if (context.indentStack.length > 0) {
+     context.indentStack.pop();
+     const newLen = context.indentStack.length > 0 
+        ? context.indentStack[context.indentStack.length - 1] 
+        : 0;
+     context.indent = "\t".repeat(newLen);
+     return true;
+  }
+  return false;
+}
