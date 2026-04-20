@@ -35,8 +35,7 @@ Define
   / Lambda
 
 Lambda
-  = Arguments _ "?" _ Lambda
-  / Arguments _ "?" Match_Case+
+  = Arguments _ "?" _ (Lambda / Match_Case+)
   / PointFree
   / Output
   / Construct
