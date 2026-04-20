@@ -83,9 +83,7 @@ Normal
 
 DirectFold = infix
 
-Product
-  = Coproduct (_ "," _ Product)
-  / Sequence
+Product = Coproduct (_ "," _ Coproduct)*
 
 Coproduct = (Sequence / Calculate) (__ (Sequence / Calculate))*
 
@@ -193,7 +191,7 @@ identifier = $([a-zA-Z_][a-zA-Z0-9_]*)
 Hex = [0-9a-fA-F]
 
 prefix
-  = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@"
+  = "~" / "!!" / "!" / "$" / "@"
 
 postfix
   = "!" / "~" / "@"
