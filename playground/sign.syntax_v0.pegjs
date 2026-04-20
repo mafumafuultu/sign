@@ -138,13 +138,14 @@ Compute = BitShift
 BitShift = BitOr (_ ("<<" / ">>") _ BitOr)*
 BitOr = BitXor (_ "||" _ BitXor)*
 BitXor = BitAnd (_ ";;" _ BitAnd)*
-BitAnd = Prefix (_ "&&" _ Prefix)*
-
-Prefix
-  = prefix* Postfix
+BitAnd = Postfix (_ "&&" _ Postfix)*
 
 Postfix
-  = Block postfix*
+  = Prefix postfix*
+
+Prefix
+  = prefix Prefix
+  / Block
 
 Block
   = "[" Expression* "]"
