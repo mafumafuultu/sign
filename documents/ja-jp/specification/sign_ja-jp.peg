@@ -20,7 +20,9 @@ SOL = &{ return location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
-Program = (SOL Expression EOL)*
+EOF = !.
+
+Program = (SOL Expression (EOL / EOF))*
 
 Expression
   = Comment
@@ -108,10 +110,10 @@ Compare = Arithmetic (_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmeti
 Arithmetic = Additive
 
 Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
-Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
+Multiply = Exponential (_ ("*" / "/" / "%") _ Exponential)*
 
-Expornential
-  = Absolute _ "^" _ Expornential
+Exponential
+  = Absolute _ "^" _ Exponential
   / Absolute
 
 Absolute
@@ -153,6 +155,7 @@ Block
 
 Atom
   = charactor
+  / string
   / number
   / address
   / register
