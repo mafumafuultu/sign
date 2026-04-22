@@ -94,11 +94,11 @@ Sequence //無限リストも表現可能
   / "(" SequenceInner ")"
 
 SequenceInner
-  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
-  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
-  / (number / Arithmetic) __ "~" __ (number / Arithmetic)
-  / (number / Arithmetic) __ "~"
-  / "~" __ (number / Arithmetic)
+  = Block _ ("~+" / "~-" / "~*" / "~/" / "~^") _ Block __ "~" __ Block
+  / Block _ ("~+" / "~-" / "~*" / "~/" / "~^") _ Block
+  / Block __ "~" __ Block
+  / Block __ "~"
+  / "~" __ Block
 
 Calculate = Logical_Xor
 Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
@@ -156,10 +156,10 @@ Block
 Atom
   = charactor
   / string
-  / number
   / address
   / register
   / unicode
+  / number
   / identifier
   / unit
 
