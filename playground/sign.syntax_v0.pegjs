@@ -56,11 +56,10 @@ Dictionary = Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Constru
 
 Arguments = Inline / Defaultive
 
-
 Defaultive
-  = "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "]"
-  / "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent "}"
-  / "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)* Dedent ")"
+  = "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "]"
+  / "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "}"
+  / "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent ")"
 
 Inline
   = identifier (__ "~"? identifier)*
@@ -79,7 +78,9 @@ DirectMap
   / infix _ (number / address / register) ","
 
 Normal
-  = (number / address / register) _ infix
+  =  prefix "_"
+  / "_" postfix
+  / (number / address / register) _ infix
   / infix _ (number / address / register)
 
 DirectFold = infix
@@ -105,7 +106,7 @@ Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
 Logical_Or = Logical_And (__ "|" __ Logical_And)*
 Logical_And = Compare (_ "&" _ Compare)*
 
-Compare = Arithmetic (_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmetic)*
+Compare = Arithmetic (_ ("==" / "<" / "<=" / "=" / ">=" / ">" / "!=") _ Arithmetic)*
 
 Arithmetic = Additive
 
@@ -117,7 +118,7 @@ Exponential
   / Absolute
 
 Absolute
-  = "|" (Additive / CalculateBlock) "|"
+  = "|" Additive "|"
   / CalculateBlock
 
 CalculateBlock
