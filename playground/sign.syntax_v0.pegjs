@@ -5,7 +5,6 @@
   };
 }
 
-
 Start = Program
 
 //空白必須
@@ -38,9 +37,9 @@ Define
 
 Lambda
   = Arguments _ "?" _ (Lambda / Match_Case+)
-  / PointFree
   / Output
   / Construct
+  / PointFree
 
 Output
   = (address / identifier) (__ "#" __ Lambda)+
