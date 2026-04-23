@@ -38,8 +38,8 @@ Define
 Lambda
   = Arguments _ "?" _ (Lambda / Match_Case+)
   / Output
-  / Construct
   / PointFree
+  / Construct
 
 Output
   = (address / identifier) (__ "#" __ Lambda)+
@@ -71,17 +71,17 @@ PointFree
   / DirectFold
 
 DirectMap
-  =  prefix "_" ","
-  / "_" postfix ","
+  =  prefix unit ","
+  / unit postfix ","
   / (number / address / register) _ infix ","
   / infix _ (number / address / register) ","
 
 Normal
-  =  prefix "_"
-  / "_" postfix
+  =  prefix unit
+  / unit postfix
   / (number / address / register) _ infix
   / infix _ (number / address / register)
-
+  
 DirectFold = infix
 
 Product = Coproduct (_ "," _ Coproduct)*
@@ -188,7 +188,9 @@ register
 unicode = $("0u" Hex+)
 
 // 6. 識別子（変数名など）
-identifier = $([a-zA-Z_][a-zA-Z0-9_]*)
+identifier
+  = $([a-zA-Z][a-zA-Z0-9_]*)
+  / $("_" [a-zA-Z0-9_]+)
 
 Hex = [0-9a-fA-F]
 
