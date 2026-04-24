@@ -36,10 +36,9 @@ Define
   / Lambda
 
 Lambda
-  = Arguments _ "?" _ (Lambda / Match_Case+)
-  / Output
+  = Output
   / PointFree
-  / Construct
+  / Arguments _ "?" _ (Lambda / Match_Case+)
 
 Output
   = (address / identifier) (__ "#" __ Lambda)+
@@ -48,8 +47,6 @@ Output
 Construct
   = Dictionary
   / Product
-  / Sequence
-  / Coproduct
 
 Dictionary = Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
 
@@ -71,41 +68,38 @@ PointFree
   / DirectFold
 
 DirectMap
-  =  prefix unit ","
-  / unit postfix ","
-  / (number / address / register) _ infix ","
-  / infix _ (number / address / register) ","
+  =  prefix unit _ ","
+  / unit postfix _ ","
+  / (number / address / register) __ infix _ ","
+  / infix __ (number / address / register) _ ","
 
 Normal
   =  prefix unit
   / unit postfix
-  / (number / address / register) _ infix
-  / infix _ (number / address / register)
+  / (number / address / register) __ infix
+  / infix __ (number / address / register)
   
 DirectFold = infix
 
-Product = Coproduct (_ "," _ Coproduct)*
+Product
+  = Sequence
+  / Coproduct (_ "," _ Coproduct)*
 
-Coproduct = (Sequence / Calculate) (__ (Sequence / Calculate))*
-
-Sequence //無限リストも表現可能
-  = "[" SequenceInner "]"
-  / "{" SequenceInner "}"
-  / "(" SequenceInner ")"
-
-SequenceInner
+Sequence
   = Block _ ("~+" / "~-" / "~*" / "~/" / "~^") _ Block __ "~" __ Block
   / Block _ ("~+" / "~-" / "~*" / "~/" / "~^") _ Block
   / Block __ "~" __ Block
   / Block __ "~"
   / "~" __ Block
 
+Coproduct = (Calculate __)* Calculate
+
 Calculate = Logical_Xor
 Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
 Logical_Or = Logical_And (__ "|" __ Logical_And)*
 Logical_And = Compare (_ "&" _ Compare)*
 
-Compare = Arithmetic (_ ("==" / "<" / "<=" / "=" / ">=" / ">" / "!=") _ Arithmetic)*
+Compare = Arithmetic (_ ("==" / "<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
 
 Arithmetic = Additive
 
@@ -150,7 +144,7 @@ Block
   = "[" Expression* "]"
   / "{" Expression* "}"
   / "(" Expression* ")"
-  / Indent Expression* Dedent
+  / Indent Expression+ Dedent
   / Atom
 
 Atom
